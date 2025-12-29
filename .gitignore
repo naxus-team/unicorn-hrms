@@ -1,0 +1,87 @@
+# Development
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Database
+*.db
+*.sqlite
+*.mdf
+*.ldf
+
+# Configuration files with secrets
+appsettings.Development.json
+appsettings.Production.json
+*.config.local
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Node modules (for frontend)
+node_modules/
+dist/
+.cache/
+
+# Mobile
+*.apk
+*.ipa
+*.dSYM.zip
+*.dSYM
+Pods/
+.expo/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Sensitive data
+*.pfx
+*.p12
+*.key
+*.pem
+certificates/
+secrets/
+
+# Build artifacts
+publish/
+artifacts/
+*.nupkg
