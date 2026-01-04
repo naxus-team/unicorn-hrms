@@ -1,0 +1,34 @@
+#include <windows.h>
+
+// Application Icon
+IDI_ICON1 ICON "assets/icon.ico"
+
+// Version Information
+1 VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"  // English (US)
+        BEGIN
+            VALUE "CompanyName",      "Naxus\0"
+            VALUE "FileDescription",  "Unicorn HRMS Desktop Application\0"
+            VALUE "FileVersion",      "1.0.0.0\0"
+            VALUE "InternalName",     "UnicornDesktop\0"
+            VALUE "LegalCopyright",   "Copyright © 2025 Naxus Technology. All rights reserved.\0"
+            VALUE "OriginalFilename", "UnicornDesktop.exe\0"
+            VALUE "ProductName",      "Unicorn HRMS\0"
+            VALUE "ProductVersion",   "1.0.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200  // English (US), Unicode
+    END
+END
