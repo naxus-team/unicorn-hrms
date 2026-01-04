@@ -1,0 +1,5 @@
+build/
+bin/
+.vs/
+*.user
+*.log
