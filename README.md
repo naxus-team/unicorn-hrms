@@ -54,7 +54,7 @@ Detailed installation instructions are available in the [Installation Guide](doc
 Quick start:
 ```bash
 # Clone repository (requires access)
-git clone https://github.com/naxus/unicorn-hrms.git
+git clone https://github.com/naxus-team/unicorn-hrms.git
 
 # Follow setup instructions
 cd unicorn-hrms
