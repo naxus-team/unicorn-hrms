@@ -28,45 +28,70 @@ namespace Unicorn {
 
     void Application::Run() {
         std::cout << "Starting " << m_Config.name << "..." << std::endl;
-
         OnInit();
         m_Renderer->Init();
         m_UIContext->Init();
 
+        const double targetFrameTime = 1.0 / 60.0; // 60 FPS
+        double lastFrameTime = glfwGetTime();
+        double accumulator = 0.0;
+
+        bool needsRedraw = true;
+        glm::vec2 lastMousePos(0, 0);
+
         while (m_Running && !m_Window->ShouldClose()) {
-            float time = (float)glfwGetTime();
-            float dt = time - m_LastTime;
-            m_LastTime = time;
+            double currentTime = glfwGetTime();
+            double frameTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
 
-            // Check for window resize
-            if (m_Window->WasResized()) {
-                uint32_t width = m_Window->GetWidth();
-                uint32_t height = m_Window->GetHeight();
-
-                // Update renderer viewport
-                m_Renderer->OnWindowResize(width, height);
-
-                // Update UI renderer viewport
-                m_UIContext->OnWindowResize(width, height);
-
-                std::cout << "[Application] Window resized to: " << width << "x" << height << std::endl;
-            }
+            accumulator += frameTime;
 
             m_Window->OnUpdate();
 
-            OnUpdate(dt);
+            glm::vec2 currentMousePos = m_UIContext->GetMousePos();
+            if (currentMousePos != lastMousePos) {
+                needsRedraw = true;
+                lastMousePos = currentMousePos;
+            }
 
-            m_Renderer->BeginFrame();
-            OnRender();
+            if (accumulator >= targetFrameTime) {
+                accumulator -= targetFrameTime;
 
-            m_UIContext->BeginFrame();
-            OnUIRender();
-            m_UIContext->EndFrame();
-            m_UIContext->Render();
+                float dt = static_cast<float>(frameTime);
 
-            m_Renderer->EndFrame();
+                // Check for window resize
+                if (m_Window->WasResized()) {
+                    uint32_t width = m_Window->GetWidth();
+                    uint32_t height = m_Window->GetHeight();
+                    m_Renderer->OnWindowResize(width, height);
+                    m_UIContext->OnWindowResize(width, height);
+                    needsRedraw = true;
+                }
 
-            m_Window->SwapBuffers();
+                OnUpdate(dt);
+
+                if (needsRedraw) {
+                    m_Renderer->BeginFrame();
+                    OnRender();
+
+                    m_UIContext->BeginFrame();
+                    OnUIRender();
+                    m_UIContext->EndFrame();
+                    m_UIContext->Render();
+
+                    m_Renderer->EndFrame();
+                    m_Window->SwapBuffers();
+                }
+                else {
+                    glfwWaitEventsTimeout(0.016);
+                }
+            }
+            else {
+                double sleepTime = targetFrameTime - accumulator;
+                if (sleepTime > 0.001) {
+                    glfwWaitEventsTimeout(sleepTime);
+                }
+            }
         }
 
         OnShutdown();

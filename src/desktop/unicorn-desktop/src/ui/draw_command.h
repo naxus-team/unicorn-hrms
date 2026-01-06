@@ -12,6 +12,7 @@ namespace Unicorn::UI {
             RoundedRect,
             Text,
             Line,
+            Icon,
             PushScissor,
             PopScissor
         };
@@ -24,6 +25,7 @@ namespace Unicorn::UI {
         float thickness = 1.0f;
         std::string text;
         int textDirection = 0; // 0 = Auto, 1 = LTR, 2 = RTL
+        uint32_t textureID = 0;
     };
 
 } // namespace Unicorn::UI

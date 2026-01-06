@@ -20,9 +20,6 @@ namespace Unicorn::UI {
         uint32_t advance;    // Offset to advance to next glyph
     };
 
-    // ============================================
-    // NEW: Font rendering options
-    // ============================================
     struct FontRenderOptions {
         bool useKerning = true;           // Enable kerning pairs
         bool useHinting = true;           // FreeType hinting
@@ -46,9 +43,6 @@ namespace Unicorn::UI {
         bool Init();
         void Shutdown();
 
-        // ============================================
-        // ORIGINAL METHODS - Keep compatibility
-        // ============================================
         bool LoadFont(const std::string& name, const std::string& filepath, uint32_t fontSize);
         bool SetActiveFont(const std::string& name);
         bool LoadUnicodeRange(const std::string& fontName, uint32_t start, uint32_t end);
@@ -62,10 +56,6 @@ namespace Unicorn::UI {
         uint32_t GetFontTexture() const { return m_FontAtlasTexture; }
         const std::unordered_map<uint32_t, Character>& GetCharacters() const { return m_ActiveCharacters; }
         TextShaper& GetTextShaper() { return *m_TextShaper; }
-
-        // ============================================
-        // NEW METHODS - Enhanced features
-        // ============================================
 
         // Load font with custom rendering options
         bool LoadFontWithOptions(const std::string& name, const std::string& filepath,
@@ -105,16 +95,16 @@ namespace Unicorn::UI {
         struct FontData {
             std::unordered_map<uint32_t, Character> characters;
             std::unordered_map<uint32_t, Character> glyphCache;
-            std::unordered_map<uint64_t, float> kerningCache;  // NEW: (left << 32 | right) -> kerning
+            std::unordered_map<uint64_t, float> kerningCache;
             uint32_t fontSize;
             FT_Face face;
-            FontRenderOptions renderOptions;  // NEW: Per-font options
+            FontRenderOptions renderOptions;
         };
 
         std::unordered_map<std::string, FontData> m_Fonts;
         std::unordered_map<uint32_t, Character> m_ActiveCharacters;
         std::unordered_map<uint32_t, Character> m_ActiveGlyphCache;
-        std::unordered_map<uint64_t, float> m_ActiveKerningCache;  // NEW
+        std::unordered_map<uint64_t, float> m_ActiveKerningCache;
 
         std::string m_ActiveFontName;
         FT_Face m_ActiveFace = nullptr;
@@ -122,7 +112,7 @@ namespace Unicorn::UI {
         Character m_DefaultCharacter;
 
         std::unique_ptr<TextShaper> m_TextShaper;
-        FontRenderOptions m_RenderOptions;  // NEW: Active render options
+        FontRenderOptions m_RenderOptions;
     };
 
 } // namespace Unicorn::UI

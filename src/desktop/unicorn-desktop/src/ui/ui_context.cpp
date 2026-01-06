@@ -5,22 +5,25 @@
 #include "../core/window.h"
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <chrono>
+
 
 namespace Unicorn::UI {
 
     // Color definitions
+    const glm::vec4 Color::Transparent = { 1.0f, 1.0f, 1.0f, 0.0f };
     const glm::vec4 Color::White = { 1.0f, 1.0f, 1.0f, 1.0f };
-    const glm::vec4 Color::Black = { 0.0f, 0.0f, 0.0f, 1.0f };
+    const glm::vec4 Color::Black = { 0.0f, 0.0f, 0.0f, 0.8f };
     const glm::vec4 Color::Primary = { 0.26f, 0.59f, 0.98f, 1.0f };
     const glm::vec4 Color::Secondary = { 0.6f, 0.2f, 0.8f, 1.0f };
     const glm::vec4 Color::Background = { 0.12f, 0.12f, 0.12f, 1.0f };
     const glm::vec4 Color::Panel = { 0.18f, 0.18f, 0.18f, 1.0f };
-    const glm::vec4 Color::Border = { 0.3f, 0.3f, 0.3f, 1.0f };
-    const glm::vec4 Color::Text = { 0.95f, 0.95f, 0.95f, 1.0f };
+    const glm::vec4 Color::Border = { 0.90f, 0.90f, 0.90f, 1.0f };
+    const glm::vec4 Color::Text = { 0.0f, 0.0f, 0.0f, 1.0f };
     const glm::vec4 Color::TextDisabled = { 0.5f, 0.5f, 0.5f, 1.0f };
-    const glm::vec4 Color::ButtonNormal = { 0.26f, 0.59f, 0.98f, 0.4f };
-    const glm::vec4 Color::ButtonHover = { 0.26f, 0.59f, 0.98f, 1.0f };
-    const glm::vec4 Color::ButtonActive = { 0.06f, 0.53f, 0.98f, 1.0f };
+    const glm::vec4 Color::ButtonNormal = { 1.0f, 1.0f, 1.0f, 1.0f };
+    const glm::vec4 Color::ButtonHover = { 0.92f, 0.92f, 0.92f, 1.0f };
+    const glm::vec4 Color::ButtonActive = { 0.9f, 0.9f, 0.9f, 1.0f };
 
     UIContext::UIContext() {
         m_LayoutStack.push_back(LayoutContext());
@@ -39,11 +42,30 @@ namespace Unicorn::UI {
         uint32_t height = window.GetHeight();
 
         m_Renderer->Init(width, height);
+
+        m_IconManager = std::make_unique<IconManager>();
+        if (!m_IconManager->Init()) {
+            std::cerr << "[UI] Failed to initialize Icon Manager!" << std::endl;
+        }
+
+        m_AnimController = std::make_unique<AnimationController>();
+
         std::cout << "[UI] Initialized with viewport: " << width << "x" << height << std::endl;
+        std::cout << "[UI] Icon Manager loaded with " << m_IconManager->GetIcon("add") << " icons" << std::endl;
     }
 
     void UIContext::Shutdown() {
         std::cout << "[UI] Shutting down UI Context..." << std::endl;
+
+        if (m_IconManager) {
+            m_IconManager->Shutdown();
+            m_IconManager.reset();
+        }
+
+        if (m_AnimController) {
+            m_AnimController.reset();
+        }
+
         if (m_Renderer) {
             m_Renderer->Shutdown();
         }
@@ -55,11 +77,35 @@ namespace Unicorn::UI {
         m_LastWidgetState = WidgetState();
 
         // Update input
+
+        glm::vec2 oldMousePos = m_MousePos;
+        bool oldMouseButtons[3] = { m_MouseButtons[0], m_MouseButtons[1], m_MouseButtons[2] };
+
+
         m_LastMousePos = m_MousePos;
         m_MousePos = Input::GetMousePosition();
         m_MouseButtons[0] = Input::IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT);
         m_MouseButtons[1] = Input::IsMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT);
         m_MouseButtons[2] = Input::IsMouseButtonPressed(GLFW_MOUSE_BUTTON_MIDDLE);
+
+        if (oldMousePos != m_MousePos ||
+            oldMouseButtons[0] != m_MouseButtons[0] ||
+            oldMouseButtons[1] != m_MouseButtons[1] ||
+            oldMouseButtons[2] != m_MouseButtons[2]) {
+            m_IsDirty = true;
+        }
+
+        static auto lastTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        m_DeltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+        lastTime = currentTime;
+
+        if (m_AnimController) {
+            m_AnimController->Update(m_DeltaTime);
+            if (m_AnimController->HasActiveAnimations()) {
+                m_IsDirty = true;
+            }
+        }
 
         m_FrameCount++;
 
@@ -91,42 +137,79 @@ namespace Unicorn::UI {
         }
     }
 
-    void UIContext::BeginWindow(const std::string& title, const glm::vec2& pos, const glm::vec2& size) {
+    void UIContext::BeginWindow(const std::string& title,
+        const glm::vec2& pos,
+        const glm::vec2& size,
+        const WindowBorderStyle& borderStyle) {
         static WindowData window;
         window.title = title;
         window.pos = pos;
         window.size = size;
         m_CurrentWindow = &window;
 
-        // Reset layout
+        glm::vec4 bgColor = Color::Panel;
+        if (title == "##sidebar") {
+            bgColor = Color::Transparent;
+        }
+
+        glm::vec2 finalPos = pos;
+        if (m_GlobalScroll.active) {
+            finalPos.y += m_GlobalScroll.offset.y;
+        }
+
         m_LayoutStack.clear();
         LayoutContext layout;
-        layout.cursor = pos + glm::vec2(10, 30);
+        layout.cursor = finalPos + glm::vec2(10, 10);
         m_LayoutStack.push_back(layout);
 
-        // Draw window background
         DrawCommand cmd;
         cmd.type = DrawCommand::Type::RoundedRect;
         cmd.pos = pos;
         cmd.size = size;
-        cmd.color = Color::Panel;
-        cmd.rounding = 8.0f;
-        AddDrawCommand(cmd);
+        cmd.color = (title == "##sidebar") ? Color::Transparent : Color::Transparent;
+        cmd.rounding = (title == "##sidebar") ? 0.0f : 8.0f;
+        m_DrawCommands.push_back(cmd);
 
-        // Draw title bar
-        cmd.pos = pos;
-        cmd.size = { size.x, 25.0f };
-        cmd.color = Color::Primary;
-        cmd.rounding = 8.0f;
-        AddDrawCommand(cmd);
+        if (borderStyle.enabled) {
+            float thickness = borderStyle.thickness;
+            glm::vec4 borderColor = borderStyle.color;
 
-        // Draw title text
-        DrawCommand textCmd;
-        textCmd.type = DrawCommand::Type::Text;
-        textCmd.pos = pos + glm::vec2(10, 5);
-        textCmd.color = Color::White;
-        textCmd.text = title;
-        AddDrawCommand(textCmd);
+            if (borderStyle.top) {
+                DrawCommand topBorder;
+                topBorder.type = DrawCommand::Type::Rect;
+                topBorder.pos = pos;
+                topBorder.size = glm::vec2(size.x, thickness);
+                topBorder.color = borderColor;
+                AddDrawCommand(topBorder);
+            }
+
+            if (borderStyle.bottom) {
+                DrawCommand bottomBorder;
+                bottomBorder.type = DrawCommand::Type::Rect;
+                bottomBorder.pos = pos + glm::vec2(0, size.y - thickness);
+                bottomBorder.size = glm::vec2(size.x, thickness);
+                bottomBorder.color = borderColor;
+                AddDrawCommand(bottomBorder);
+            }
+
+            if (borderStyle.left) {
+                DrawCommand leftBorder;
+                leftBorder.type = DrawCommand::Type::Rect;
+                leftBorder.pos = pos;
+                leftBorder.size = glm::vec2(thickness, size.y);
+                leftBorder.color = borderColor;
+                AddDrawCommand(leftBorder);
+            }
+
+            if (borderStyle.right) {
+                DrawCommand rightBorder;
+                rightBorder.type = DrawCommand::Type::Rect;
+                rightBorder.pos = pos + glm::vec2(size.x - thickness, 0);
+                rightBorder.size = glm::vec2(thickness, size.y);
+                rightBorder.color = borderColor;
+                AddDrawCommand(rightBorder);
+            }
+        }
     }
 
     void UIContext::EndWindow() {
@@ -162,16 +245,18 @@ namespace Unicorn::UI {
         }
     }
 
-    void UIContext::Separator() {
+    void UIContext::Separator(float line, int weight) {
         auto& layout = m_LayoutStack.back();
+		float defaultRoundedness = 2.0f;
 
         DrawCommand cmd;
         cmd.type = DrawCommand::Type::Line;
         cmd.pos = layout.cursor;
+        cmd.rounding = defaultRoundedness;
         cmd.size = layout.direction == LayoutContext::Direction::Vertical
-            ? glm::vec2(200, 0) : glm::vec2(0, 200);
+            ? glm::vec2(weight, 0) : glm::vec2(0, weight);
         cmd.color = Color::Border;
-        cmd.thickness = 1.0f;
+        cmd.thickness = line;
         AddDrawCommand(cmd);
 
         Spacing(layout.spacing * 2);
@@ -414,30 +499,51 @@ namespace Unicorn::UI {
     WidgetState UIContext::ProcessWidget(const glm::vec2& pos, const glm::vec2& size) {
         WidgetState state;
 
+        std::string widgetID = GenerateID("widget_" +
+            std::to_string((int)pos.x) + "_" + std::to_string((int)pos.y));
+
         state.hovered = m_MousePos.x >= pos.x && m_MousePos.x <= pos.x + size.x &&
             m_MousePos.y >= pos.y && m_MousePos.y <= pos.y + size.y;
 
+        // Check active (pressed)
         if (state.hovered && m_MouseButtons[0]) {
             state.active = true;
+            m_WidgetPressStates[widgetID] = true;
         }
 
-        static bool wasPressed = false;
-        if (m_MouseButtons[0]) {
-            wasPressed = true;
-        }
-        if (state.hovered && !m_MouseButtons[0] && wasPressed) {
+        // Check clicked (released while hovering)
+        if (state.hovered && !m_MouseButtons[0] && m_WidgetPressStates[widgetID]) {
             state.clicked = true;
-            wasPressed = false;
+            m_WidgetPressStates[widgetID] = false;
         }
+
+        // Clear press state if mouse released anywhere
         if (!m_MouseButtons[0]) {
-            wasPressed = false;
+            m_WidgetPressStates[widgetID] = false;
         }
 
         return state;
     }
 
     void UIContext::AddDrawCommand(const DrawCommand& cmd) {
-        m_DrawCommands.push_back(cmd);
+        DrawCommand modifiedCmd = cmd;
+
+        // Apply global scroll offset to position-based commands
+        if (m_GlobalScroll.active) {
+            switch (cmd.type) {
+            case DrawCommand::Type::Rect:
+            case DrawCommand::Type::RoundedRect:
+            case DrawCommand::Type::Text:
+            case DrawCommand::Type::Line:
+            case DrawCommand::Type::Icon:
+                modifiedCmd.pos.y += m_GlobalScroll.offset.y;
+                break;
+            default:
+                break;
+            }
+        }
+
+        m_DrawCommands.push_back(modifiedCmd);
     }
 
     glm::vec2 UIContext::CalcTextSize(const std::string& text) {
@@ -510,8 +616,22 @@ namespace Unicorn::UI {
         scissorCmd.size = size;
         AddDrawCommand(scissorCmd);
 
-        // Handle scrolling
         bool mouseInPanel = IsPointInRect(m_MousePos, pos, size);
+
+        // Handle scrolling
+        if (mouseInPanel) {
+            float wheelDelta = Input::GetMouseWheelDelta();
+            if (wheelDelta != 0.0f) {
+                // Scroll speed: 40 pixels per wheel notch
+                region.scrollOffset.y += wheelDelta * 40.0f;
+
+                // Clamp scroll
+                float maxScrollY = glm::max(0.0f, region.contentSize.y - size.y + 20.0f);
+                region.scrollOffset.y = glm::clamp(region.scrollOffset.y, -maxScrollY, 0.0f);
+            }
+        }
+
+        // Mouse drag scrolling (fallback)
         if (mouseInPanel && m_MouseButtons[0] && !region.isDragging) {
             region.isDragging = true;
             region.dragStartMouse = m_MousePos;
@@ -524,6 +644,7 @@ namespace Unicorn::UI {
             float maxScrollY = glm::max(0.0f, region.contentSize.y - size.y + 20.0f);
             region.scrollOffset.y = glm::clamp(region.scrollOffset.y, -maxScrollY, 0.0f);
             region.scrollOffset.x = 0.0f;
+
             if (!m_MouseButtons[0]) {
                 region.isDragging = false;
             }
@@ -586,6 +707,393 @@ namespace Unicorn::UI {
         }
 
         m_ActiveScrollRegionID.clear();
+    }
+
+    void UIContext::BeginGlobalScroll(const glm::vec2& pos, const glm::vec2& size) {
+        m_GlobalScroll.active = true;
+        m_GlobalScroll.viewportPos = pos;
+        m_GlobalScroll.viewportSize = size;
+
+        bool mouseInViewport = IsPointInRect(m_MousePos, pos, size);
+
+        if (mouseInViewport) {
+            float wheelDelta = Input::GetMouseWheelDelta();
+            if (wheelDelta != 0.0f) {
+                m_GlobalScroll.offset.y += wheelDelta * 60.0f; // 60 pixels per notch
+
+                // Clamp scroll offset
+                m_GlobalScroll.offset.y = glm::clamp(
+                    m_GlobalScroll.offset.y,
+                    -m_GlobalScroll.maxScroll,
+                    0.0f
+                );
+            }
+        }
+
+        // Handle scroll via right mouse button drag (fallback)
+        static bool wasDragging = false;
+        static glm::vec2 dragStartPos;
+        static glm::vec2 scrollStartOffset;
+
+        if (mouseInViewport && m_MouseButtons[1] && !wasDragging) {
+            wasDragging = true;
+            dragStartPos = m_MousePos;
+            scrollStartOffset = m_GlobalScroll.offset;
+        }
+
+        if (wasDragging && m_MouseButtons[1]) {
+            glm::vec2 mouseDelta = m_MousePos - dragStartPos;
+            m_GlobalScroll.offset.y = scrollStartOffset.y + mouseDelta.y;
+
+            // Clamp scroll offset
+            m_GlobalScroll.offset.y = glm::clamp(
+                m_GlobalScroll.offset.y,
+                -m_GlobalScroll.maxScroll,
+                0.0f
+            );
+        }
+        else {
+            wasDragging = false;
+        }
+    }
+
+    void UIContext::EndGlobalScroll() {
+        if (!m_GlobalScroll.active) return;
+
+        // Calculate total content height from all draw commands
+        m_GlobalScroll.contentHeight = 0.0f;
+
+        for (const auto& cmd : m_DrawCommands) {
+            if (cmd.type == DrawCommand::Type::Rect ||
+                cmd.type == DrawCommand::Type::RoundedRect) {
+                float bottom = cmd.pos.y + cmd.size.y;
+                m_GlobalScroll.contentHeight = glm::max(m_GlobalScroll.contentHeight, bottom);
+            }
+        }
+
+        // Calculate max scroll
+        m_GlobalScroll.maxScroll = glm::max(
+            0.0f,
+            m_GlobalScroll.contentHeight - m_GlobalScroll.viewportSize.y + 50.0f
+        );
+
+        // Draw scrollbar if content exceeds viewport
+        if (m_GlobalScroll.maxScroll > 0.0f) {
+            float scrollbarX = m_GlobalScroll.viewportPos.x + m_GlobalScroll.viewportSize.x - 12.0f;
+            float scrollbarHeight = m_GlobalScroll.viewportSize.y;
+
+            // Calculate thumb size and position
+            float visibleRatio = m_GlobalScroll.viewportSize.y / m_GlobalScroll.contentHeight;
+            float thumbHeight = glm::max(30.0f, scrollbarHeight * visibleRatio);
+
+            float scrollRatio = -m_GlobalScroll.offset.y / m_GlobalScroll.maxScroll;
+            float thumbY = m_GlobalScroll.viewportPos.y + scrollRatio * (scrollbarHeight - thumbHeight);
+
+            // Draw scrollbar track
+            DrawCommand trackCmd;
+            trackCmd.type = DrawCommand::Type::RoundedRect;
+            trackCmd.pos = glm::vec2(scrollbarX, m_GlobalScroll.viewportPos.y);
+            trackCmd.size = glm::vec2(8, scrollbarHeight);
+            trackCmd.color = glm::vec4(0.2f, 0.2f, 0.2f, 0.3f);
+            trackCmd.rounding = 4.0f;
+            AddDrawCommand(trackCmd);
+
+            // Draw scrollbar thumb
+            DrawCommand thumbCmd;
+            thumbCmd.type = DrawCommand::Type::RoundedRect;
+            thumbCmd.pos = glm::vec2(scrollbarX, thumbY);
+            thumbCmd.size = glm::vec2(8, thumbHeight);
+            thumbCmd.color = glm::vec4(0.6f, 0.6f, 0.6f, 0.8f);
+            thumbCmd.rounding = 4.0f;
+            AddDrawCommand(thumbCmd);
+        }
+
+        m_GlobalScroll.active = false;
+    }
+
+    bool UIContext::IconButton(const std::string& iconName,
+        const glm::vec2& size,
+        Alignment align) {
+        auto& layout = m_LayoutStack.back();
+        glm::vec2 buttonSize = size;
+        glm::vec2 pos = layout.cursor;
+
+        if (m_CurrentWindow) {
+            float availableWidth = m_CurrentWindow->size.x - 22.0f;
+
+            switch (align) {
+            case Alignment::Center:
+                pos.x = m_CurrentWindow->pos.x + 10.0f + (availableWidth - buttonSize.x) * 0.5f;
+                break;
+            case Alignment::Right:
+                pos.x = m_CurrentWindow->pos.x + 10.0f + availableWidth - buttonSize.x;
+                break;
+            case Alignment::Left:
+            default:
+                break;
+            }
+        }
+
+        std::string id = GenerateID(iconName);
+        WidgetState state = ProcessWidget(pos, buttonSize);
+        m_LastWidgetState = state;
+
+        if (!m_AnimController) {
+            DrawCommand bgCmd;
+            bgCmd.type = DrawCommand::Type::RoundedRect;
+            bgCmd.pos = pos;
+            bgCmd.size = buttonSize;
+            bgCmd.color = state.hovered ? Color::ButtonHover : Color::ButtonNormal;
+            bgCmd.rounding = 6.0f;
+            AddDrawCommand(bgCmd);
+
+            if (align == Alignment::Left) {
+                layout.Advance(buttonSize);
+            }
+            else {
+                layout.cursor.y += buttonSize.y + layout.spacing;
+            }
+
+            return state.clicked;
+        }
+
+        auto& animState = m_AnimController->GetButtonState(id);
+        float deltaTime = m_DeltaTime > 0 ? m_DeltaTime : 0.016f;
+
+        const float hoverSpeed = 16.0f;
+        const float activeSpeed = 16.0f;
+
+        if (state.hovered) {
+            animState.hoverProgress = glm::min(1.0f, animState.hoverProgress + deltaTime * hoverSpeed);
+        }
+        else {
+            animState.hoverProgress = glm::max(0.0f, animState.hoverProgress - deltaTime * hoverSpeed);
+        }
+
+        if (state.active) {
+            animState.activeProgress = glm::min(1.0f, animState.activeProgress + deltaTime * activeSpeed);
+        }
+        else {
+            animState.activeProgress = glm::max(0.0f, animState.activeProgress - deltaTime * activeSpeed);
+        }
+
+        float smoothHover = animState.hoverProgress * animState.hoverProgress *
+            (3.0f - 2.0f * animState.hoverProgress);
+        float smoothActive = animState.activeProgress * animState.activeProgress *
+            (3.0f - 2.0f * animState.activeProgress);
+
+        float hoverScale = 1.0f + (smoothHover * 0.03f);
+        float activeScale = 1.0f - (smoothActive * 0.04f);
+        float finalScale = hoverScale * activeScale;
+
+        glm::vec4 baseColor = Color::Transparent;
+        glm::vec4 hoverColor = Color::ButtonHover;
+        glm::vec4 activeColor = Color::ButtonActive;
+
+        glm::vec4 currentColor = AnimationController::LerpColor(baseColor, hoverColor, smoothHover);
+        currentColor = AnimationController::LerpColor(currentColor, activeColor, smoothActive);
+
+        glm::vec2 scaledSize = buttonSize * finalScale;
+        glm::vec2 centerOffset = (buttonSize - scaledSize) * 0.5f;
+        glm::vec2 finalPos = pos + centerOffset;
+
+        DrawCommand bgCmd;
+        bgCmd.type = DrawCommand::Type::RoundedRect;
+        bgCmd.pos = finalPos;
+        bgCmd.size = scaledSize;
+        bgCmd.color = currentColor;
+        bgCmd.rounding = 6.0f;
+        AddDrawCommand(bgCmd);
+
+        if (m_IconManager) {
+            const IconManager::Icon* icon = m_IconManager->GetIcon(iconName);
+            if (icon) {
+                float iconSize = 20.0f;
+
+                glm::vec2 iconPos;
+                iconPos = finalPos + glm::vec2(
+                    (scaledSize.x - iconSize) * 0.5f,
+                    (scaledSize.y - iconSize) * 0.5f
+                );
+
+                DrawCommand iconCmd;
+                iconCmd.type = DrawCommand::Type::Icon;
+                iconCmd.pos = iconPos;
+                iconCmd.size = glm::vec2(iconSize, iconSize);
+                iconCmd.textureID = icon->textureID;
+
+                iconCmd.color = Color::Black;
+
+
+                AddDrawCommand(iconCmd);
+            }
+        }
+
+        if (align == Alignment::Left) {
+            layout.Advance(buttonSize);
+        }
+        else {
+            layout.cursor.y += buttonSize.y + layout.spacing;
+        }
+
+        return state.clicked;
+    }
+
+    bool UIContext::ButtonWithIcon(const std::string& iconName,
+        const std::string& label,
+        const glm::vec2& size,
+        Alignment align) {
+        auto& layout = m_LayoutStack.back();
+        glm::vec2 buttonSize = size;
+        glm::vec2 pos = layout.cursor;
+
+        if (m_CurrentWindow) {
+            float availableWidth = m_CurrentWindow->size.x - 20.0f;
+
+            switch (align) {
+            case Alignment::Center:
+                pos.x = m_CurrentWindow->pos.x + 10.0f + (availableWidth - buttonSize.x) * 0.5f;
+                break;
+            case Alignment::Right:
+                pos.x = m_CurrentWindow->pos.x + 10.0f + availableWidth - buttonSize.x;
+                break;
+            case Alignment::Left:
+            default:
+                break;
+            }
+        }
+
+        std::string id = GenerateID(label.empty() ? iconName : label);
+        WidgetState state = ProcessWidget(pos, buttonSize);
+        m_LastWidgetState = state;
+
+        if (!m_AnimController) {
+            DrawCommand bgCmd;
+            bgCmd.type = DrawCommand::Type::RoundedRect;
+            bgCmd.pos = pos;
+            bgCmd.size = buttonSize;
+            bgCmd.color = state.hovered ? Color::ButtonHover : Color::ButtonNormal;
+            bgCmd.rounding = 6.0f;
+            AddDrawCommand(bgCmd);
+
+            if (!label.empty()) {
+                glm::vec2 textSize = CalcTextSize(label);
+                glm::vec2 textPos = pos + (buttonSize - textSize) * 0.5f;
+                DrawCommand textCmd;
+                textCmd.type = DrawCommand::Type::Text;
+                textCmd.pos = textPos;
+                textCmd.color = Color::Black;
+                textCmd.text = label;
+                AddDrawCommand(textCmd);
+            }
+
+            if (align == Alignment::Left) {
+                layout.Advance(buttonSize);
+            }
+            else {
+                layout.cursor.y += buttonSize.y + layout.spacing;
+            }
+
+            return state.clicked;
+        }
+
+        auto& animState = m_AnimController->GetButtonState(id);
+        float deltaTime = m_DeltaTime > 0 ? m_DeltaTime : 0.016f;
+
+        const float hoverSpeed = 16.0f;
+        const float activeSpeed = 16.0f;
+
+        if (state.hovered) {
+            animState.hoverProgress = glm::min(1.0f, animState.hoverProgress + deltaTime * hoverSpeed);
+        }
+        else {
+            animState.hoverProgress = glm::max(0.0f, animState.hoverProgress - deltaTime * hoverSpeed);
+        }
+
+        if (state.active) {
+            animState.activeProgress = glm::min(1.0f, animState.activeProgress + deltaTime * activeSpeed);
+        }
+        else {
+            animState.activeProgress = glm::max(0.0f, animState.activeProgress - deltaTime * activeSpeed);
+        }
+
+        float smoothHover = animState.hoverProgress * animState.hoverProgress *
+            (3.0f - 2.0f * animState.hoverProgress);
+        float smoothActive = animState.activeProgress * animState.activeProgress *
+            (3.0f - 2.0f * animState.activeProgress);
+
+        float hoverScale = 1.0f + (smoothHover * 0.03f);
+        float activeScale = 1.0f - (smoothActive * 0.04f);
+        float finalScale = hoverScale * activeScale;
+
+        glm::vec4 baseColor = Color::Transparent;
+        glm::vec4 hoverColor = Color::ButtonHover;
+        glm::vec4 activeColor = Color::ButtonActive;
+
+        glm::vec4 currentColor = AnimationController::LerpColor(baseColor, hoverColor, smoothHover);
+        currentColor = AnimationController::LerpColor(currentColor, activeColor, smoothActive);
+
+        glm::vec2 scaledSize = buttonSize * finalScale;
+        glm::vec2 centerOffset = (buttonSize - scaledSize) * 0.5f;
+        glm::vec2 finalPos = pos + centerOffset;
+
+        DrawCommand bgCmd;
+        bgCmd.type = DrawCommand::Type::RoundedRect;
+        bgCmd.pos = finalPos;
+        bgCmd.size = scaledSize;
+        bgCmd.color = currentColor;
+        bgCmd.rounding = 6.0f;
+        AddDrawCommand(bgCmd);
+
+        if (m_IconManager) {
+            const IconManager::Icon* icon = m_IconManager->GetIcon(iconName);
+            if (icon) {
+                float iconSize = 20.0f;
+
+                glm::vec2 iconPos;
+                if (label.empty()) {
+                    iconPos = finalPos + glm::vec2(
+                        (scaledSize.x - iconSize) * 0.5f,
+                        (scaledSize.y - iconSize) * 0.5f
+                    );
+                }
+                else {
+                    iconPos = finalPos + glm::vec2(8.0f, (scaledSize.y - iconSize) * 0.5f);
+                }
+
+                DrawCommand iconCmd;
+                iconCmd.type = DrawCommand::Type::Icon;
+                iconCmd.pos = iconPos;
+                iconCmd.size = glm::vec2(iconSize, iconSize);
+                iconCmd.textureID = icon->textureID;
+
+                iconCmd.color = Color::Black;
+
+
+                AddDrawCommand(iconCmd);
+            }
+        }
+
+        if (!label.empty()) {
+            glm::vec2 textSize = CalcTextSize(label);
+            glm::vec2 textPos = finalPos + glm::vec2(36.0f, (scaledSize.y - textSize.y) * 0.5f);
+
+            DrawCommand textCmd;
+            textCmd.type = DrawCommand::Type::Text;
+            textCmd.pos = textPos;
+            textCmd.color = Color::Black;
+            textCmd.text = label;
+            AddDrawCommand(textCmd);
+        }
+
+        if (align == Alignment::Left) {
+            layout.Advance(buttonSize);
+        }
+        else {
+            layout.cursor.y += buttonSize.y + layout.spacing;
+        }
+
+        return state.clicked;
     }
 
     bool UIContext::IsPointInRect(const glm::vec2& point, const glm::vec2& rectPos,

@@ -8,7 +8,7 @@ namespace Unicorn {
     namespace UI { class UIContext; }
 
     struct ApplicationConfig {
-        std::string name = "Unicorn HRMS";
+        std::string name = "Unicorn";
         uint32_t width = 1920;
         uint32_t height = 1080;
         bool vsync = true;
@@ -23,7 +23,7 @@ namespace Unicorn {
         void Close();
 
         Window& GetWindow() { return *m_Window; }
-        UI::UIContext& GetUI() { return *m_UIContext; }  // <- الإضافة هنا
+        UI::UIContext& GetUI() { return *m_UIContext; }
 
         static Application& Get() { return *s_Instance; }
 

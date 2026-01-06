@@ -34,7 +34,9 @@ set(SOURCES
     src/ui/ui_renderer.cpp
     src/ui/font_manager.cpp
     src/ui/text_shaper.cpp
-    
+    src/ui/icon_manager.cpp
+    src/ui/ui_animation.cpp
+
     # Database
     src/database/connection.cpp
     

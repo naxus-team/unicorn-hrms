@@ -1,4 +1,5 @@
 #include "window.h"
+#include "input.h"
 #include <GLFW/glfw3.h>
 #include <iostream>
 
@@ -23,12 +24,11 @@ namespace Unicorn {
 
             std::cout << "GLFW initialized successfully" << std::endl;
 
+            glfwWindowHint(GLFW_SAMPLES, 8);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
             glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-            // Enable MSAA (4x samples for smooth edges)
-            glfwWindowHint(GLFW_SAMPLES, 4);
 
 #ifdef __APPLE__
             glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -42,9 +42,10 @@ namespace Unicorn {
                 throw std::runtime_error("Failed to create GLFW window");
             }
 
-            std::cout << "Window created successfully with MSAA 4x" << std::endl;
+            std::cout << "Window created successfully with MSAA 8x" << std::endl;
 
             glfwMakeContextCurrent(m_Window);
+            glfwSwapInterval(1);
 
             m_Data.width = props.width;
             m_Data.height = props.height;
@@ -67,7 +68,20 @@ namespace Unicorn {
                 std::cout << "[Window] Framebuffer resized to: " << width << "x" << height << std::endl;
                 });
 
-            // Setup window size callback
+            glfwSetFramebufferSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
+                WindowData* data = (WindowData*)glfwGetWindowUserPointer(window);
+                if (data) {
+                    data->width = width;
+                    data->height = height;
+                }
+
+                s_WindowResized = true;
+                s_NewWidth = width;
+                s_NewHeight = height;
+
+                std::cout << "[Window] Framebuffer resized to: " << width << "x" << height << std::endl;
+                });
+
             glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
                 WindowData* data = (WindowData*)glfwGetWindowUserPointer(window);
                 if (data) {
@@ -76,6 +90,11 @@ namespace Unicorn {
                 }
 
                 std::cout << "[Window] Window resized to: " << width << "x" << height << std::endl;
+                });
+
+            glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xoffset, double yoffset) {
+                // Store the scroll delta in Input system
+                Input::SetMouseWheelDelta(static_cast<float>(yoffset));
                 });
         }
 

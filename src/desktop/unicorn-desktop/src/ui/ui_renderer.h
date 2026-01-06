@@ -54,6 +54,8 @@ namespace Unicorn::UI {
         void InitTextShaders();
         void AddQuad(const glm::vec2& pos, const glm::vec2& size, const glm::vec4& color,
             const glm::vec2& rectPos, const glm::vec2& rectSize, float rounding);
+        void DrawIcon(const glm::vec2& pos, const glm::vec2& size,
+            uint32_t textureID, const glm::vec4& color);
 
         static constexpr size_t MaxVertices = 10000;
         static constexpr size_t MaxIndices = 15000;

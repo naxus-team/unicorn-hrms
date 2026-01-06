@@ -177,9 +177,6 @@ namespace Unicorn::UI {
                 bool cpIsDigit = IsDigit(cp);
                 bool cpIsNeutral = IsNeutralChar(cp);
 
-                // ========================================
-                // NEW LOGIC: Digits always force a break
-                // ========================================
                 if (cpIsDigit != currentIsDigits && !cpIsNeutral) {
                     shouldBreak = true;
                 }
@@ -203,9 +200,6 @@ namespace Unicorn::UI {
                     }
                 }
 
-                // ========================================
-                // NEW: Digits are ALWAYS LTR
-                // ========================================
                 if (seg.isDigits) {
                     seg.isRTL = false;
                 }

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "draw_command.h"
+#include "icon_manager.h"
+#include "ui_animation.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -16,6 +18,7 @@ namespace Unicorn::UI {
 
     // UI Colors
     struct Color {
+        static const glm::vec4 Transparent;
         static const glm::vec4 White;
         static const glm::vec4 Black;
         static const glm::vec4 Primary;
@@ -35,6 +38,22 @@ namespace Unicorn::UI {
         bool hovered = false;
         bool active = false;
         bool clicked = false;
+    };
+
+    enum class Alignment {
+        Left,
+        Center,
+        Right
+    };
+
+    struct WindowBorderStyle {
+        bool enabled = false;
+        float thickness = 1.0f;
+        glm::vec4 color = Color::Border;
+        bool top = true;
+        bool right = true;
+        bool bottom = true;
+        bool left = true;
     };
 
     // Layout info
@@ -87,18 +106,29 @@ namespace Unicorn::UI {
         void OnWindowResize(uint32_t width, uint32_t height);
 
         // Window management
-        void BeginWindow(const std::string& title, const glm::vec2& pos, const glm::vec2& size);
+        void BeginWindow(const std::string& title,
+            const glm::vec2& pos,
+            const glm::vec2& size,
+            const WindowBorderStyle& borderStyle = WindowBorderStyle());
         void EndWindow();
 
         // Layout
         void BeginHorizontal();
         void EndHorizontal();
         void Spacing(float pixels = 0.0f);
-        void Separator();
+        void Separator(float line, int weight);
         void NewLine();
 
         // Widgets
         bool Button(const std::string& label, const glm::vec2& size = glm::vec2(120, 30));
+        bool ButtonWithIcon(const std::string& iconName,
+            const std::string& label,
+            const glm::vec2& size,
+            Alignment align = Alignment::Left);
+
+        bool IconButton(const std::string& iconName,
+            const glm::vec2& size,
+            Alignment align = Alignment::Left);
         void Text(const std::string& text);
         void TextColored(const glm::vec4& color, const std::string& text);
         void TextLTR(const std::string& text);
@@ -123,12 +153,23 @@ namespace Unicorn::UI {
         // Getters
         const std::vector<DrawCommand>& GetDrawCommands() const { return m_DrawCommands; }
         float GetDeltaTime() const { return m_DeltaTime; }
+        std::vector<LayoutContext>& GetLayoutStack() { return m_LayoutStack; }
+
 
         UIRenderer& GetRenderer() { return *m_Renderer; }
         const UIRenderer& GetRenderer() const { return *m_Renderer; }
 
         void BeginScrollablePanel(const std::string& id, const glm::vec2& size);
         void EndScrollablePanel();
+        void BeginGlobalScroll(const glm::vec2& pos, const glm::vec2& size);
+        void EndGlobalScroll();
+
+        IconManager& GetIconManager() { return *m_IconManager; }
+        AnimationController& GetAnimController() { return *m_AnimController; }
+
+        void MarkDirty() { m_IsDirty = true; }
+        bool IsDirty() const { return m_IsDirty; }
+        void ClearDirty() { m_IsDirty = false; }
 
         // Helper to check if point is in rect
         bool IsPointInRect(const glm::vec2& point, const glm::vec2& rectPos, const glm::vec2& rectSize);
@@ -140,7 +181,11 @@ namespace Unicorn::UI {
         void AddDrawCommand(const DrawCommand& cmd);
         glm::vec2 CalcTextSize(const std::string& text);
 
+        std::unique_ptr<IconManager> m_IconManager;
+        std::unique_ptr<AnimationController> m_AnimController;
+
         // State
+        std::unordered_map<std::string, bool> m_WidgetPressStates;
         std::unique_ptr<UIRenderer> m_Renderer;
         std::vector<LayoutContext> m_LayoutStack;
         std::vector<DrawCommand> m_DrawCommands;
@@ -151,6 +196,7 @@ namespace Unicorn::UI {
         glm::vec2 m_MousePos = { 0, 0 };
         glm::vec2 m_LastMousePos = { 0, 0 };
         bool m_MouseButtons[3] = { false, false, false };
+        float m_MouseWheelDelta = 0.0f;
 
         std::string m_HoveredID;
         std::string m_ActiveID;
@@ -158,6 +204,17 @@ namespace Unicorn::UI {
 
         float m_DeltaTime = 0.0f;
         int m_FrameCount = 0;
+
+        bool m_IsDirty = true;
+
+        struct GlobalScroll {
+            bool active = false;
+            glm::vec2 offset = { 0, 0 };
+            glm::vec2 viewportPos;
+            glm::vec2 viewportSize;
+            float contentHeight = 0;
+            float maxScroll = 0;
+        } m_GlobalScroll;
 
         // Current window
         struct WindowData {

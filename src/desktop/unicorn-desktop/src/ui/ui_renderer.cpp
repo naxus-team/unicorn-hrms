@@ -131,6 +131,9 @@ namespace Unicorn::UI {
         // Enable MSAA (Multisample Anti-Aliasing)
         glEnable(GL_MULTISAMPLE);
 
+        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+        glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+
         if (!m_FontManager->Init()) {
             std::cerr << "[UIRenderer] Failed to initialize font manager" << std::endl;
         }
@@ -392,6 +395,19 @@ namespace Unicorn::UI {
                 }
                 DrawText(cmd.pos, cmd.text, cmd.color);
                 break;
+            case DrawCommand::Type::Icon:
+                // Flush shapes before rendering icon
+                if (!m_VertexBuffer.empty()) {
+                    FlushBatch();
+                    m_VertexBuffer.clear();
+                    m_IndexBuffer.clear();
+                }
+
+                // Render icon as textured quad
+                if (cmd.textureID != 0) {
+                    DrawIcon(cmd.pos, cmd.size, cmd.textureID, cmd.color);
+                }
+                break;
             }
         }
 
@@ -449,7 +465,7 @@ namespace Unicorn::UI {
                 );
             }
 
-            float xpos = x + glyph.offset.x + ch.bearing.x + kerning;
+            float xpos = x + glyph.offset.x + ch.bearing.x;
             float ypos = baselineY + glyph.offset.y - ch.bearing.y;
 
             float w = ch.size.x;
@@ -472,11 +488,7 @@ namespace Unicorn::UI {
 
             glDrawArrays(GL_TRIANGLES, 0, 6);
 
-            x += glyph.advance.x + kerning;
-
-            // Apply letter spacing from font options
-            float extraSpacing = m_FontManager->GetRenderOptions().letterSpacing;
-            x += extraSpacing;
+            x += glyph.advance.x;
         }
 
         glBindVertexArray(0);
@@ -485,13 +497,11 @@ namespace Unicorn::UI {
     }
 
     void UIRenderer::PushScissor(const glm::vec2& pos, const glm::vec2& size) {
-        // Convert from top-left origin to bottom-left origin (OpenGL)
         int x = (int)pos.x;
         int y = (int)(m_WindowHeight - pos.y - size.y);
         int width = (int)size.x;
         int height = (int)size.y;
 
-        // If there's already a scissor active, intersect with it
         if (!m_ScissorStack.empty()) {
             const auto& parent = m_ScissorStack.back();
 
@@ -602,6 +612,51 @@ namespace Unicorn::UI {
         }
 
         glBindVertexArray(0);
+        glUseProgram(0);
+        glDisable(GL_BLEND);
+    }
+
+    void UIRenderer::DrawIcon(const glm::vec2& pos, const glm::vec2& size,
+        uint32_t textureID, const glm::vec4& color) {
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        glUseProgram(m_TextShaderProgram);
+        glUniformMatrix4fv(glGetUniformLocation(m_TextShaderProgram, "projection"),
+            1, GL_FALSE, &m_Projection[0][0]);
+        glUniform4f(glGetUniformLocation(m_TextShaderProgram, "textColor"),
+            color.r, color.g, color.b, color.a);
+        glUniform1i(glGetUniformLocation(m_TextShaderProgram, "useSubpixel"), 0);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glBindVertexArray(m_TextVAO);
+
+        float vertices[6][4] = {
+            { pos.x,          pos.y + size.y,  0.0f, 1.0f },
+            { pos.x,          pos.y,           0.0f, 0.0f },
+            { pos.x + size.x, pos.y,           1.0f, 0.0f },
+
+            { pos.x,          pos.y + size.y,  0.0f, 1.0f },
+            { pos.x + size.x, pos.y,           1.0f, 0.0f },
+            { pos.x + size.x, pos.y + size.y,  1.0f, 1.0f }
+        };
+
+        glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glUseProgram(0);
         glDisable(GL_BLEND);
     }
