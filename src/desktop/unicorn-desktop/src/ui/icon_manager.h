@@ -2,6 +2,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <vector>
 #include <glm/glm.hpp>
 
 namespace Unicorn::UI {
@@ -21,7 +22,6 @@ namespace Unicorn::UI {
         void Shutdown();
 
         // Load icon from SVG file or embedded string
-        bool LoadIconFromFile(const std::string& name, const std::string& filepath, int size = 24);
         bool LoadIconFromString(const std::string& name, const std::string& svgContent, int size = 24);
 
         // Get icon texture
@@ -30,9 +30,20 @@ namespace Unicorn::UI {
         // Built-in icons (Material Design style)
         void LoadBuiltInIcons();
 
+        // Clear pre-generated cache (for testing)
+        static void ClearCache();
+
     private:
         std::unordered_map<std::string, Icon> m_Icons;
 
+        // ========================================
+        // OPTIMIZED: Pre-generation system
+        // ========================================
+        void PreGenerateAllIcons();
+        void PreRasterizeIcon(const std::string& name, const std::string& svgContent, int size);
+        uint32_t CreateTextureFromCache(const std::string& name);
+
+        // Deprecated (kept for compatibility)
         uint32_t RasterizeSVG(const std::string& svgContent, int size);
     };
 
@@ -41,14 +52,18 @@ namespace Unicorn::UI {
         // Add icon
         static const char* Add = R"(
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="white"/>
+                <path d="M22,11.97c0,7.32-2.68,10-10,10s-10-2.68-10-10v0.05c0-7.32,2.68-10,10-10 M22,2.03l-10,9.95" stroke="white" fill="transparent"/>
             </svg>
         )";
 
         // Settings icon
         static const char* Settings = R"(
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="white"/>
+                <path d="M12,22.97c-7.89,0-10.98-3.07-11-10.93c0,0,0-0.01,0-0.01c0-0.01,0-0.02,0-0.03s0-0.02,0-0.03c0,0,0-0.01,0-0.01
+	C1.02,4.09,4.11,1.03,12,1.03c0.55,0,1,0.45,1,1s-0.45,1-1,1c-6.72,0-8.99,2.26-9,8.97c0.01,6.71,2.28,8.97,9,8.97
+	c6.73,0,9-2.27,9-9c0-0.55,0.45-1,1-1s1,0.45,1,1C23,19.89,19.92,22.97,12,22.97z M12,12.97c-0.26,0-0.51-0.1-0.71-0.29
+	c-0.39-0.39-0.39-1.02,0-1.41l10-9.95c0.39-0.39,1.02-0.39,1.41,0c0.39,0.39,0.39,1.02,0,1.41l-10,9.95
+	C12.51,12.88,12.25,12.97,12,12.97z" fill="white"/>
             </svg>
         )";
 

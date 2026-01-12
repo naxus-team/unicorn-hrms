@@ -24,7 +24,9 @@ namespace Unicorn {
         virtual uint32_t GetHeight() const = 0;
         virtual bool ShouldClose() const = 0;
         virtual bool WasResized() = 0;
+        virtual bool IsResizing() const = 0;
         virtual void* GetNativeWindow() const = 0;
+        virtual void SetCursor(int cursorType) = 0;
 
         static Window* Create(const WindowProps& props);
     };

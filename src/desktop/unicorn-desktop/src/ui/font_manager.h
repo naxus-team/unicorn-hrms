@@ -6,6 +6,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <fstream>
 
 // Forward declare FreeType types
 typedef struct FT_LibraryRec_* FT_Library;
@@ -25,7 +26,10 @@ namespace Unicorn::UI {
         bool useHinting = true;           // FreeType hinting
         bool useAntialiasing = true;      // Enable AA
         float letterSpacing = 0.0f;       // Extra spacing between letters (pixels)
-        float lineHeight = 1.2f;          // Line height multiplier
+        float lineHeight = 1.0f;          // Line height multiplier
+        float weight = 0.0f;  // 0.0 = normal, 1.0 = bold, 2.0 = extra bold
+        float baselineOffset = 0.0f;  // Pixels to shift up (negative) or down (positive)
+
 
         enum class AntialiasMode {
             None,       // No antialiasing (faster)
@@ -70,6 +74,8 @@ namespace Unicorn::UI {
         FontRenderOptions& GetRenderOptions() { return m_RenderOptions; }
         const FontRenderOptions& GetRenderOptions() const { return m_RenderOptions; }
         void SetRenderOptions(const FontRenderOptions& options);
+
+        FT_Face GetActiveFace() const { return m_ActiveFace; }
 
         // Get active font name
         const std::string& GetActiveFontName() const { return m_ActiveFontName; }

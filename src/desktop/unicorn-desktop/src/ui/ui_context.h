@@ -8,15 +8,14 @@
 #include <memory>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <glm/glm.hpp>
 
 namespace Unicorn::UI {
 
-    // Forward declarations
     class UIRenderer;
     struct FontRenderOptions;
 
-    // UI Colors
     struct Color {
         static const glm::vec4 Transparent;
         static const glm::vec4 White;
@@ -28,12 +27,12 @@ namespace Unicorn::UI {
         static const glm::vec4 Border;
         static const glm::vec4 Text;
         static const glm::vec4 TextDisabled;
+        static const glm::vec4 TextSecondary;
         static const glm::vec4 ButtonNormal;
         static const glm::vec4 ButtonHover;
         static const glm::vec4 ButtonActive;
     };
 
-    // Widget state
     struct WidgetState {
         bool hovered = false;
         bool active = false;
@@ -56,7 +55,6 @@ namespace Unicorn::UI {
         bool left = true;
     };
 
-    // Layout info
     struct LayoutContext {
         glm::vec2 cursor = { 10.0f, 10.0f };
         glm::vec2 contentSize = { 0.0f, 0.0f };
@@ -79,18 +77,25 @@ namespace Unicorn::UI {
         }
     };
 
+    struct ScrollPhysics {
+        glm::vec2 velocity = { 0, 0 };
+        glm::vec2 offset = { 0, 0 };
+        glm::vec2 target = { 0, 0 };
+        float friction = 0.88f;
+        float springStiffness = 280.0f;
+        float springDamping = 22.0f;
+        float minVelocity = 0.5f;
+        bool hasInertia = false;
+    };
+
     struct ScrollableRegion {
+        std::string id;
         glm::vec2 pos;
         glm::vec2 size;
         glm::vec2 contentSize;
-        glm::vec2 scrollOffset;
-        bool isDragging = false;
-        glm::vec2 dragStartMouse;
-        glm::vec2 dragStartScroll;
-        std::string id;
+        ScrollPhysics physics;
     };
 
-    // Main UI Context
     class UIContext {
     public:
         UIContext();
@@ -102,30 +107,25 @@ namespace Unicorn::UI {
         void EndFrame();
         void Render();
 
-        // Window resize handling
         void OnWindowResize(uint32_t width, uint32_t height);
 
-        // Window management
         void BeginWindow(const std::string& title,
             const glm::vec2& pos,
             const glm::vec2& size,
             const WindowBorderStyle& borderStyle = WindowBorderStyle());
         void EndWindow();
 
-        // Layout
         void BeginHorizontal();
         void EndHorizontal();
         void Spacing(float pixels = 0.0f);
         void Separator(float line, int weight);
         void NewLine();
 
-        // Widgets
         bool Button(const std::string& label, const glm::vec2& size = glm::vec2(120, 30));
         bool ButtonWithIcon(const std::string& iconName,
             const std::string& label,
             const glm::vec2& size,
             Alignment align = Alignment::Left);
-
         bool IconButton(const std::string& iconName,
             const glm::vec2& size,
             Alignment align = Alignment::Left);
@@ -138,10 +138,8 @@ namespace Unicorn::UI {
         bool InputFloat(const std::string& label, float* value, float step = 1.0f);
         bool SliderFloat(const std::string& label, float* value, float min, float max);
 
-        // Panels
         void Panel(const glm::vec2& size, const std::function<void()>& content);
 
-        // Input queries
         bool IsItemHovered() const { return m_LastWidgetState.hovered; }
         bool IsItemActive() const { return m_LastWidgetState.active; }
         bool IsItemClicked() const { return m_LastWidgetState.clicked; }
@@ -149,17 +147,17 @@ namespace Unicorn::UI {
         glm::vec2 GetMousePos() const { return m_MousePos; }
         bool IsMouseButtonDown(int button) const;
         bool IsKeyPressed(int key) const;
+        bool IsKeyPressedWithRepeat(int key);
 
-        // Getters
         const std::vector<DrawCommand>& GetDrawCommands() const { return m_DrawCommands; }
         float GetDeltaTime() const { return m_DeltaTime; }
         std::vector<LayoutContext>& GetLayoutStack() { return m_LayoutStack; }
 
-
         UIRenderer& GetRenderer() { return *m_Renderer; }
         const UIRenderer& GetRenderer() const { return *m_Renderer; }
 
-        void BeginScrollablePanel(const std::string& id, const glm::vec2& size);
+        void BeginScrollablePanel(const std::string& id, const glm::vec2& size,
+            BorderStyle borderStyle = BorderStyle::Inset);
         void EndScrollablePanel();
         void BeginGlobalScroll(const glm::vec2& pos, const glm::vec2& size);
         void EndGlobalScroll();
@@ -167,25 +165,60 @@ namespace Unicorn::UI {
         IconManager& GetIconManager() { return *m_IconManager; }
         AnimationController& GetAnimController() { return *m_AnimController; }
 
+        void CheckInputChanges();
+
         void MarkDirty() { m_IsDirty = true; }
         bool IsDirty() const { return m_IsDirty; }
         void ClearDirty() { m_IsDirty = false; }
 
-        // Helper to check if point is in rect
-        bool IsPointInRect(const glm::vec2& point, const glm::vec2& rectPos, const glm::vec2& rectSize);
+        bool HasActiveAnimations() const;
+
+        void UpdateAnimations(float dt) {
+            if (m_AnimController) {
+                m_AnimController->Update(dt);
+                if (m_AnimController->HasActiveAnimations()) {
+                    m_IsDirty = true;
+                }
+            }
+        }
+
+        glm::vec2 GetScrolledMousePos() const {
+            if (!m_ActiveScrollRegionID.empty()) {
+                auto it = m_ScrollRegions.find(m_ActiveScrollRegionID);
+                if (it != m_ScrollRegions.end()) {
+                    return m_MousePos - it->second.physics.offset;
+                }
+            }
+            return m_MousePos;
+        }
+
+        void SetScrollPhysics(float friction, float stiffness, float damping) {
+            m_DefaultPhysics.friction = friction;
+            m_DefaultPhysics.springStiffness = stiffness;
+            m_DefaultPhysics.springDamping = damping;
+        }
+
+        bool IsPointInRect(const glm::vec2& point, const glm::vec2& rectPos,
+            const glm::vec2& rectSize) const;
+        std::string GetScrollRegionUnderMouse() const;
 
     private:
-        // Internal helpers
         std::string GenerateID(const std::string& label);
         WidgetState ProcessWidget(const glm::vec2& pos, const glm::vec2& size);
         void AddDrawCommand(const DrawCommand& cmd);
         glm::vec2 CalcTextSize(const std::string& text);
+        size_t GetCursorPositionFromX(const std::string& text, float targetX);
+
+        void UpdatePhysicsScroll(float dt);
+        void UpdateScrollPhysics(ScrollPhysics& physics, float dt);
+
+        int m_CurrentCursor = 0;
 
         std::unique_ptr<IconManager> m_IconManager;
         std::unique_ptr<AnimationController> m_AnimController;
 
-        // State
         std::unordered_map<std::string, bool> m_WidgetPressStates;
+        std::unordered_set<std::string> m_LastHoveredWidgets;
         std::unique_ptr<UIRenderer> m_Renderer;
         std::vector<LayoutContext> m_LayoutStack;
         std::vector<DrawCommand> m_DrawCommands;
@@ -202,6 +235,10 @@ namespace Unicorn::UI {
         std::string m_ActiveID;
         WidgetState m_LastWidgetState;
 
+        std::string m_ActiveInputID;
+        std::string* m_ActiveInputBuffer = nullptr;
+        bool m_BackspaceHandled = false;
+
         float m_DeltaTime = 0.0f;
         int m_FrameCount = 0;
 
@@ -209,14 +246,64 @@ namespace Unicorn::UI {
 
         struct GlobalScroll {
             bool active = false;
-            glm::vec2 offset = { 0, 0 };
             glm::vec2 viewportPos;
             glm::vec2 viewportSize;
             float contentHeight = 0;
             float maxScroll = 0;
+            float lastWindowBottom = 0;
+            std::string pageId;  // ADD THIS - to track per-page scroll
+            ScrollPhysics physics;
         } m_GlobalScroll;
 
-        // Current window
+        std::unordered_map<std::string, glm::vec2> m_PageScrollOffsets;
+
+        ScrollPhysics m_DefaultPhysics;
+
+        struct TextInputState {
+            std::string id;
+            std::string* buffer = nullptr;
+            size_t cursorPos = 0;
+            size_t selectionStart = 0;
+            size_t selectionEnd = 0;
+            bool hasSelection = false;
+            float scrollOffset = 0.0f;
+            bool isDragging = false;
+            glm::vec2 lastMousePos;
+
+            void ClearSelection() {
+                hasSelection = false;
+                selectionStart = 0;
+                selectionEnd = 0;
+            }
+
+            void DeleteSelection() {
+                if (!hasSelection || !buffer) return;
+                size_t start = glm::min(selectionStart, selectionEnd);
+                size_t end = glm::max(selectionStart, selectionEnd);
+                buffer->erase(start, end - start);
+                cursorPos = start;
+                ClearSelection();
+            }
+
+            std::string GetSelectedText() const {
+                if (!hasSelection || !buffer) return "";
+                size_t start = glm::min(selectionStart, selectionEnd);
+                size_t end = glm::max(selectionStart, selectionEnd);
+                return buffer->substr(start, end - start);
+            }
+        } m_TextInput;
+
+        struct KeyRepeatState {
+            int key = -1;
+            double lastPressTime = 0.0;
+            double lastRepeatTime = 0.0;
+            bool isRepeating = false;
+            const double initialDelay = 0.5;
+            const double repeatInterval = 0.03;
+        };
+
+        std::unordered_map<int, KeyRepeatState> m_KeyStates;
+
         struct WindowData {
             std::string title;
             glm::vec2 pos;
@@ -225,4 +312,4 @@ namespace Unicorn::UI {
         WindowData* m_CurrentWindow = nullptr;
     };
 
-} // namespace Unicorn::UI
+}
