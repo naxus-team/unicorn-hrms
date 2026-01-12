@@ -47,7 +47,7 @@ namespace Unicorn::UI {
         // Font settings
         float m_FontSize = 14.0f;
         float m_LetterSpacing = 0.0f;
-        float m_LineHeight = 1.2f;
+        float m_LineHeight = 1.0f;
         bool m_UseKerning = true;
         int m_AntialiasMode = 1; // 0=None, 1=Grayscale, 2=LCD
 

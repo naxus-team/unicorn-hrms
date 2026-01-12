@@ -123,93 +123,187 @@ namespace Unicorn::UI {
     }
 
     void UIRenderer::Init(uint32_t windowWidth, uint32_t windowHeight) {
+        std::cout << "[UIRenderer] ========================================" << std::endl;
+        std::cout << "[UIRenderer] Starting initialization..." << std::endl;
+        std::cout << "[UIRenderer] Window size: " << windowWidth << "x" << windowHeight << std::endl;
+
         m_WindowWidth = windowWidth;
         m_WindowHeight = windowHeight;
 
-        std::cout << "[UIRenderer] Initializing Blender-style UI..." << std::endl;
+        try {
+            std::cout << "[UIRenderer] Step 1: Enabling MSAA..." << std::endl;
+            glEnable(GL_MULTISAMPLE);
+            glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+            glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+            std::cout << "[UIRenderer]   ✓ MSAA enabled" << std::endl;
 
-        // Enable MSAA (Multisample Anti-Aliasing)
-        glEnable(GL_MULTISAMPLE);
+            std::cout << "[UIRenderer] Step 2: Initializing FontManager..." << std::endl;
+            if (!m_FontManager) {
+                std::cerr << "[UIRenderer]   ✗ FontManager is nullptr!" << std::endl;
+                return;
+            }
 
-        glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-        glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+            if (!m_FontManager->Init()) {
+                std::cerr << "[UIRenderer]   ✗ FontManager Init() failed" << std::endl;
+                return;
+            }
+            std::cout << "[UIRenderer]   ✓ FontManager initialized" << std::endl;
 
-        if (!m_FontManager->Init()) {
-            std::cerr << "[UIRenderer] Failed to initialize font manager" << std::endl;
-        }
+            std::cout << "[UIRenderer] Step 3: Configuring font options..." << std::endl;
+            FontRenderOptions fontOptions;
+            fontOptions.useKerning = false;
+            fontOptions.useAntialiasing = true;
+            fontOptions.aaMode = FontRenderOptions::AntialiasMode::Grayscale;
+            fontOptions.letterSpacing = 0.0f;
+            fontOptions.lineHeight = 1.0f;
+            std::cout << "[UIRenderer]   ✓ Font options configured" << std::endl;
 
-        FontRenderOptions fontOptions;
-        fontOptions.useKerning = false;          // Disable extra kerning
-        fontOptions.useAntialiasing = true;
-        fontOptions.aaMode = FontRenderOptions::AntialiasMode::Grayscale;
-        fontOptions.letterSpacing = 0.0f;        // No extra letter spacing
-        fontOptions.lineHeight = 1.0f;           // Normal line height
+            std::cout << "[UIRenderer] Step 4: Loading fonts..." << std::endl;
 
 #ifdef _WIN32
-        m_FontManager->LoadFontWithOptions("default", "./assets/fonts/cairo.ttf", 14, fontOptions);
+            std::vector<std::pair<std::string, std::string>> fontPaths = {
+                {"notosansar", "C:\\Windows\\Fonts\\NotoSansArabic-Regular.ttf"},
+                {"arial", "C:\\Windows\\Fonts\\arial.ttf"}
+            };
 #else
-        m_FontManager->LoadFontWithOptions("default", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16, fontOptions);
+            std::vector<std::pair<std::string, std::string>> fontPaths = {
+                {"dejavu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"}
+            };
 #endif
 
-        InitShaders();
-        InitTextShaders();
+            bool fontLoaded = false;
+            for (const auto& [fontName, fontPath] : fontPaths) {
+                std::cout << "[UIRenderer]   Trying: " << fontPath << std::endl;
 
-        // Create buffers for shapes with NEW vertex layout
-        glGenVertexArrays(1, &m_VAO);
-        glGenBuffers(1, &m_VBO);
-        glGenBuffers(1, &m_IBO);
+                // File existence check
+                FILE* testFile = fopen(fontPath.c_str(), "rb");
+                if (!testFile) {
+                    std::cout << "[UIRenderer]     ✗ File not accessible" << std::endl;
+                    continue;
+                }
+                fclose(testFile);
+                std::cout << "[UIRenderer]     ✓ File exists" << std::endl;
 
-        glBindVertexArray(m_VAO);
+                // Try loading
+                if (m_FontManager->LoadFontWithOptions(fontName, fontPath, 16, fontOptions)) {
+                    std::cout << "[UIRenderer]     ✓ Font loaded successfully" << std::endl;
+                    fontLoaded = true;
 
-        glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-        glBufferData(GL_ARRAY_BUFFER, MaxVertices * sizeof(UIVertex), nullptr, GL_DYNAMIC_DRAW);
+                    // Set as active
+                    if (fontName == "msgothic" || fontName == "meiryo" || !fontLoaded) {
+                        m_FontManager->SetActiveFont(fontName);
+                        std::cout << "[UIRenderer]     ✓ Set as active font" << std::endl;
+                    }
+                }
+                else {
+                    std::cout << "[UIRenderer]     ✗ Font loading failed" << std::endl;
+                }
+            }
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_IBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, MaxIndices * sizeof(uint32_t), nullptr, GL_DYNAMIC_DRAW);
+            if (!fontLoaded) {
+                std::cerr << "[UIRenderer]   ✗✗✗ CRITICAL: No fonts loaded!" << std::endl;
+                // Don't return - continue with broken fonts for debugging
+            }
+            else {
+                std::cout << "[UIRenderer]   ✓ At least one font loaded" << std::endl;
+            }
 
-        // Attribute 0: Position
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex), (void*)offsetof(UIVertex, position));
+            std::cout << "[UIRenderer] Step 5: Initializing shaders..." << std::endl;
+            InitShaders();
+            std::cout << "[UIRenderer]   ✓ Shape shaders initialized" << std::endl;
 
-        // Attribute 1: Color
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(UIVertex), (void*)offsetof(UIVertex, color));
+            InitTextShaders();
+            std::cout << "[UIRenderer]   ✓ Text shaders initialized" << std::endl;
 
-        // Attribute 2: TexCoord
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex), (void*)offsetof(UIVertex, texCoord));
+            std::cout << "[UIRenderer] Step 6: Creating OpenGL buffers..." << std::endl;
 
-        // Attribute 3: RectPos (NEW)
-        glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex), (void*)offsetof(UIVertex, rectPos));
+            // VAO/VBO/IBO for shapes
+            glGenVertexArrays(1, &m_VAO);
+            std::cout << "[UIRenderer]   VAO: " << m_VAO << std::endl;
 
-        // Attribute 4: RectSize (NEW)
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex), (void*)offsetof(UIVertex, rectSize));
+            glGenBuffers(1, &m_VBO);
+            std::cout << "[UIRenderer]   VBO: " << m_VBO << std::endl;
 
-        // Attribute 5: Rounding (NEW)
-        glEnableVertexAttribArray(5);
-        glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(UIVertex), (void*)offsetof(UIVertex, rounding));
+            glGenBuffers(1, &m_IBO);
+            std::cout << "[UIRenderer]   IBO: " << m_IBO << std::endl;
 
-        glBindVertexArray(0);
+            glBindVertexArray(m_VAO);
 
-        // Create buffers for text rendering
-        glGenVertexArrays(1, &m_TextVAO);
-        glGenBuffers(1, &m_TextVBO);
+            glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+            glBufferData(GL_ARRAY_BUFFER, MaxVertices * sizeof(UIVertex), nullptr, GL_DYNAMIC_DRAW);
 
-        glBindVertexArray(m_TextVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_IBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, MaxIndices * sizeof(uint32_t), nullptr, GL_DYNAMIC_DRAW);
 
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+            // Vertex attributes
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex),
+                (void*)offsetof(UIVertex, position));
 
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(UIVertex),
+                (void*)offsetof(UIVertex, color));
 
-        SetViewport(windowWidth, windowHeight);
+            glEnableVertexAttribArray(2);
+            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex),
+                (void*)offsetof(UIVertex, texCoord));
 
-        std::cout << "[UIRenderer] ✓ Blender-style UI initialized with smooth rounded corners" << std::endl;
+            glEnableVertexAttribArray(3);
+            glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex),
+                (void*)offsetof(UIVertex, rectPos));
+
+            glEnableVertexAttribArray(4);
+            glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(UIVertex),
+                (void*)offsetof(UIVertex, rectSize));
+
+            glEnableVertexAttribArray(5);
+            glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(UIVertex),
+                (void*)offsetof(UIVertex, rounding));
+
+            glBindVertexArray(0);
+            std::cout << "[UIRenderer]   ✓ Shape buffers created" << std::endl;
+
+            std::cout << "[UIRenderer] Step 7: Creating text rendering buffers..." << std::endl;
+
+            glGenVertexArrays(1, &m_TextVAO);
+            std::cout << "[UIRenderer]   Text VAO: " << m_TextVAO << std::endl;
+
+            glGenBuffers(1, &m_TextVBO);
+            std::cout << "[UIRenderer]   Text VBO: " << m_TextVBO << std::endl;
+
+            glBindVertexArray(m_TextVAO);
+            glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+            std::cout << "[UIRenderer]   ✓ Text buffers created" << std::endl;
+
+            std::cout << "[UIRenderer] Step 8: Setting viewport..." << std::endl;
+            SetViewport(windowWidth, windowHeight);
+            std::cout << "[UIRenderer]   ✓ Viewport set" << std::endl;
+
+            // Check for OpenGL errors
+            GLenum err;
+            while ((err = glGetError()) != GL_NO_ERROR) {
+                std::cerr << "[UIRenderer]   ✗ OpenGL error during init: " << err << std::endl;
+            }
+
+            std::cout << "[UIRenderer] ========================================" << std::endl;
+            std::cout << "[UIRenderer] ✓✓✓ INITIALIZATION COMPLETE ✓✓✓" << std::endl;
+            std::cout << "[UIRenderer] ========================================" << std::endl;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[UIRenderer] ✗✗✗ EXCEPTION during init: " << e.what() << std::endl;
+            throw;
+        }
+        catch (...) {
+            std::cerr << "[UIRenderer] ✗✗✗ UNKNOWN EXCEPTION during init!" << std::endl;
+            throw;
+        }
     }
 
     void UIRenderer::InitShaders() {
@@ -431,6 +525,9 @@ namespace Unicorn::UI {
         AddQuad(pos, size, color, pos, size, rounding);
     }
 
+    // Update RenderText() in ui_renderer.cpp to support weight
+
+
     void UIRenderer::DrawText(const glm::vec2& pos, const std::string& text, const glm::vec4& color) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -445,31 +542,52 @@ namespace Unicorn::UI {
         glActiveTexture(GL_TEXTURE0);
         glBindVertexArray(m_TextVAO);
 
+        // Get shaped glyphs from HarfBuzz
         auto shapedGlyphs = m_FontManager->ShapeText(text);
 
-        float baselineY = pos.y;
-        const Character& refChar = m_FontManager->GetCharacter('H');
-        baselineY += refChar.bearing.y;
+        if (shapedGlyphs.empty()) {
+            glBindVertexArray(0);
+            glDisable(GL_BLEND);
+            return;
+        }
 
-        float x = pos.x;
+        // Get font rendering options
+        const auto& renderOptions = m_FontManager->GetRenderOptions();
+        float weight = renderOptions.weight;
+        float baselineOffset = renderOptions.baselineOffset;
 
-        for (size_t i = 0; i < shapedGlyphs.size(); i++) {
-            const auto& glyph = shapedGlyphs[i];
+        FT_Face face = m_FontManager->GetActiveFace();
+        float fontSize = face ? (float)face->size->metrics.height / 64.0f : 16.0f;
+
+        float lineHeight = renderOptions.lineHeight > 0.0f ? renderOptions.lineHeight : 1.0f;
+        float baselineY = pos.y + (fontSize * 0.75f * lineHeight);
+
+        // Render each glyph
+        for (const auto& glyph : shapedGlyphs) {
             const Character& ch = m_FontManager->GetCharacterByGlyphIndex(glyph.glyphIndex);
 
-            float kerning = 0.0f;
-            if (i > 0 && m_FontManager->GetRenderOptions().useKerning) {
-                kerning = m_FontManager->GetKerning(
-                    shapedGlyphs[i - 1].codepoint,
-                    glyph.codepoint
-                );
+            if (ch.textureID == 0) {
+                continue; // Skip missing glyphs
             }
 
-            float xpos = x + glyph.offset.x + ch.bearing.x;
+            // Calculate position with HarfBuzz offsets
+            float xpos = pos.x + glyph.offset.x + ch.bearing.x;
             float ypos = baselineY + glyph.offset.y - ch.bearing.y;
 
             float w = ch.size.x;
             float h = ch.size.y;
+
+            // Apply weight (bold effect through slight enlargement + multi-pass rendering)
+            if (weight > 0.01f) {
+                // Calculate weight expansion
+                float weightExpansion = weight * 0.5f; // pixels
+
+                // Expand glyph slightly
+                xpos -= weightExpansion * 0.5f;
+                ypos -= weightExpansion * 0.5f;
+                w += weightExpansion;
+                h += weightExpansion;
+            }
 
             float vertices[6][4] = {
                 { xpos,     ypos + h,   0.0f, 1.0f },
@@ -482,13 +600,41 @@ namespace Unicorn::UI {
             };
 
             glBindTexture(GL_TEXTURE_2D, ch.textureID);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
             glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+            // First pass: main glyph
             glDrawArrays(GL_TRIANGLES, 0, 6);
 
-            x += glyph.advance.x;
+            // Additional passes for weight (bold effect)
+            if (weight > 0.5f) {
+                // Second pass with slight offset for extra boldness
+                float offsetX = 0.3f;
+                for (int i = 0; i < 6; i++) {
+                    vertices[i][0] += offsetX;
+                }
+                glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
+                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+
+            if (weight > 1.0f) {
+                // Third pass for extra bold
+                for (int i = 0; i < 6; i++) {
+                    vertices[i][0] += 0.3f;
+                }
+                glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
+                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
         }
 
         glBindVertexArray(0);

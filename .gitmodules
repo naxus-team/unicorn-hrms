@@ -1,0 +1,27 @@
+[submodule "src/desktop/unicorn-desktop/vendor/openssl"]
+	path = src/desktop/unicorn-desktop/vendor/openssl
+	url = https://github.com/openssl/openssl.git
+[submodule "src/desktop/vendor/curl"]
+	path = src/desktop/vendor/curl
+	url = https://github.com/curl/curl
+[submodule "src/desktop/vendor/freetype"]
+	path = src/desktop/vendor/freetype
+	url = https://github.com/freetype/freetype
+[submodule "src/desktop/vendor/glad"]
+	path = src/desktop/vendor/glad
+	url = https://github.com/Dav1dde/glad
+[submodule "src/desktop/vendor/glfw"]
+	path = src/desktop/vendor/glfw
+	url = https://github.com/glfw/glfw
+[submodule "src/desktop/vendor/glm"]
+	path = src/desktop/vendor/glm
+	url = https://github.com/g-truc/glm
+[submodule "src/desktop/vendor/harfbuzz"]
+	path = src/desktop/vendor/harfbuzz
+	url = https://github.com/harfbuzz/harfbuzz
+[submodule "src/desktop/vendor/libpng"]
+	path = src/desktop/vendor/libpng
+	url = https://github.com/glennrp/libpng
+[submodule "src/desktop/vendor/zlib"]
+	path = src/desktop/vendor/zlib
+	url = https://github.com/madler/zlib

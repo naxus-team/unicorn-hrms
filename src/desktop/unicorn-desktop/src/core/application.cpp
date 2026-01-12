@@ -1,9 +1,13 @@
-#include "application.h"
+﻿#include "application.h"
 #include "window.h"
+#include "input.h"
 #include "../renderer/renderer.h"
 #include "../ui/ui_context.h"
-#include <iostream>
+#include "../audio/sound_manager.h"
 #include <GLFW/glfw3.h>
+#include <iostream>
+#include <chrono>
+#include <thread>
 
 namespace Unicorn {
 
@@ -22,74 +26,77 @@ namespace Unicorn {
         m_Window = std::unique_ptr<Window>(Window::Create(props));
         m_Renderer = std::make_unique<Renderer>();
         m_UIContext = std::make_unique<UI::UIContext>();
+        m_AudioManager = std::make_unique<Audio::SoundManager>();
     }
 
     Application::~Application() {}
 
     void Application::Run() {
         std::cout << "Starting " << m_Config.name << "..." << std::endl;
+
         OnInit();
         m_Renderer->Init();
         m_UIContext->Init();
+        m_AudioManager->Init();
 
-        const double targetFrameTime = 1.0 / 60.0; // 60 FPS
         double lastFrameTime = glfwGetTime();
-        double accumulator = 0.0;
-
-        bool needsRedraw = true;
-        glm::vec2 lastMousePos(0, 0);
+        m_UIContext->MarkDirty();
 
         while (m_Running && !m_Window->ShouldClose()) {
-            double currentTime = glfwGetTime();
-            double frameTime = currentTime - lastFrameTime;
-            lastFrameTime = currentTime;
+            bool hasAnimations = m_UIContext->HasActiveAnimations();
+            bool isDirty = m_UIContext->IsDirty();
 
-            accumulator += frameTime;
-
-            m_Window->OnUpdate();
-
-            glm::vec2 currentMousePos = m_UIContext->GetMousePos();
-            if (currentMousePos != lastMousePos) {
-                needsRedraw = true;
-                lastMousePos = currentMousePos;
-            }
-
-            if (accumulator >= targetFrameTime) {
-                accumulator -= targetFrameTime;
-
-                float dt = static_cast<float>(frameTime);
-
-                // Check for window resize
-                if (m_Window->WasResized()) {
-                    uint32_t width = m_Window->GetWidth();
-                    uint32_t height = m_Window->GetHeight();
-                    m_Renderer->OnWindowResize(width, height);
-                    m_UIContext->OnWindowResize(width, height);
-                    needsRedraw = true;
-                }
-
-                OnUpdate(dt);
-
-                if (needsRedraw) {
-                    m_Renderer->BeginFrame();
-                    OnRender();
-
-                    m_UIContext->BeginFrame();
-                    OnUIRender();
-                    m_UIContext->EndFrame();
-                    m_UIContext->Render();
-
-                    m_Renderer->EndFrame();
-                    m_Window->SwapBuffers();
-                }
-                else {
-                    glfwWaitEventsTimeout(0.016);
-                }
+            if (!isDirty && !hasAnimations) {
+                glfwWaitEvents();
             }
             else {
-                double sleepTime = targetFrameTime - accumulator;
-                if (sleepTime > 0.001) {
-                    glfwWaitEventsTimeout(sleepTime);
+                glfwPollEvents();
+            }
+
+            double frameStart = glfwGetTime();
+            float dt = static_cast<float>(frameStart - lastFrameTime);
+            lastFrameTime = frameStart;
+
+            if (m_Window->WasResized()) {
+                uint32_t width = m_Window->GetWidth();
+                uint32_t height = m_Window->GetHeight();
+                m_Renderer->OnWindowResize(width, height);
+                m_UIContext->OnWindowResize(width, height);
+                m_UIContext->MarkDirty();
+            }
+
+            if (hasAnimations) {
+                m_UIContext->UpdateAnimations(dt);
+
+                if (!m_UIContext->HasActiveAnimations()) {
+                    m_UIContext->MarkDirty();
+                }
+            }
+
+            OnUpdate(dt);
+
+            if (m_UIContext->IsDirty() || hasAnimations) {
+                m_UIContext->BeginFrame();
+                OnUIRender();
+                m_UIContext->EndFrame();
+
+                m_Renderer->BeginFrame();
+                OnRender();
+                m_UIContext->Render();
+                m_Renderer->EndFrame();
+
+                m_Window->SwapBuffers();
+                m_UIContext->ClearDirty();
+            }
+
+            Input::ResetMouseWheel();
+
+            if (hasAnimations) {
+                auto targetFrameTime = std::chrono::microseconds(16667);
+                auto frameTime = std::chrono::microseconds(static_cast<long long>(dt * 1000000.0));
+
+                if (frameTime < targetFrameTime) {
+                    std::this_thread::sleep_for(targetFrameTime - frameTime);
                 }
             }
         }
@@ -101,6 +108,14 @@ namespace Unicorn {
 
     void Application::Close() {
         m_Running = false;
+    }
+
+    void Application::TriggerRender() {
+        if (s_Instance && s_Instance->m_UIContext) {
+            s_Instance->m_UIContext->MarkDirty();
+        }
+
+        glfwPostEmptyEvent();
     }
 
 }

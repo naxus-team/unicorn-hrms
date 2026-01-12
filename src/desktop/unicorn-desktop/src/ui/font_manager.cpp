@@ -1,4 +1,4 @@
-#include "font_manager.h"
+﻿#include "font_manager.h"
 #include <glad/glad.h>
 #include <iostream>
 #include <ft2build.h>
@@ -7,7 +7,6 @@
 namespace Unicorn::UI {
 
     FontManager::FontManager() {
-        // Initialize default character
         m_DefaultCharacter.textureID = 0;
         m_DefaultCharacter.size = glm::ivec2(8, 16);
         m_DefaultCharacter.bearing = glm::ivec2(0, 0);
@@ -30,7 +29,7 @@ namespace Unicorn::UI {
             std::cerr << "[FontManager] Warning: Failed to initialize TextShaper" << std::endl;
         }
 
-        std::cout << "[FontManager] Initialized successfully with UTF-8 support" << std::endl;
+        std::cout << "[FontManager] Initialized successfully" << std::endl;
         return true;
     }
 
@@ -70,86 +69,172 @@ namespace Unicorn::UI {
         std::cout << "[FontManager] Shutdown" << std::endl;
     }
 
-    // ============================================
-    // BACKWARD COMPATIBLE: Original LoadFont
-    // ============================================
     bool FontManager::LoadFont(const std::string& name, const std::string& filepath,
         uint32_t fontSize) {
-        // Call new version with default options
         FontRenderOptions defaultOptions;
         return LoadFontWithOptions(name, filepath, fontSize, defaultOptions);
     }
 
-    // ============================================
-    // NEW: Load font with options
-    // ============================================
     bool FontManager::LoadFontWithOptions(const std::string& name, const std::string& filepath,
         uint32_t fontSize, const FontRenderOptions& options) {
+
+        std::cout << "[FontManager] Loading: " << name << " from " << filepath << std::endl;
+
+        std::ifstream fileCheck(filepath);
+        if (!fileCheck.good()) {
+            std::cerr << "[FontManager] File not found: " << filepath << std::endl;
+            return false;
+        }
+        fileCheck.close();
+
         FT_Face face;
-        if (FT_New_Face(m_FTLibrary, filepath.c_str(), 0, &face)) {
-            std::cerr << "[FontManager] Failed to load font: " << filepath << std::endl;
+        FT_Error error = FT_New_Face(m_FTLibrary, filepath.c_str(), 0, &face);
+        if (error) {
+            std::cerr << "[FontManager] Failed to load font, error: " << error << std::endl;
             return false;
         }
 
-        FT_Set_Pixel_Sizes(face, 0, fontSize);
+        std::cout << "[FontManager] Font: " << (face->family_name ? face->family_name : "Unknown")
+            << " (" << face->num_glyphs << " glyphs)" << std::endl;
+
+        uint32_t renderSize = fontSize * 2;
+        FT_Set_Pixel_Sizes(face, 0, renderSize);
+
+        int32_t loadFlags = FT_LOAD_DEFAULT | FT_LOAD_FORCE_AUTOHINT;
+        if (options.useHinting) {
+            loadFlags |= FT_LOAD_TARGET_LIGHT;
+        }
+        else {
+            loadFlags |= FT_LOAD_NO_HINTING;
+        }
+
+        std::unordered_map<uint32_t, Character> tempCharacters;
+        std::unordered_map<uint32_t, Character> tempGlyphCache;
+        std::unordered_map<uint64_t, float> tempKerningCache;
+
+        auto loadRange = [&](uint32_t start, uint32_t end, const char* rangeName) -> bool {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            uint32_t loadedCount = 0;
+
+            for (uint32_t codepoint = start; codepoint <= end; codepoint++) {
+                uint32_t glyphIndex = FT_Get_Char_Index(face, codepoint);
+                if (glyphIndex == 0) continue;
+                if (FT_Load_Glyph(face, glyphIndex, loadFlags)) continue;
+
+                FT_Render_Mode renderMode = options.useAntialiasing ? FT_RENDER_MODE_NORMAL : FT_RENDER_MODE_MONO;
+                if (FT_Render_Glyph(face->glyph, renderMode)) continue;
+
+                if (face->glyph->bitmap.width == 0 || face->glyph->bitmap.rows == 0) {
+                    Character character = { 0, glm::ivec2(0, 0), glm::ivec2(0, 0),
+                                          static_cast<uint32_t>(face->glyph->advance.x) };
+                    tempCharacters[codepoint] = character;
+                    loadedCount++;
+                    continue;
+                }
+
+                uint32_t texture;
+                glGenTextures(1, &texture);
+                glBindTexture(GL_TEXTURE_2D, texture);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, face->glyph->bitmap.width, face->glyph->bitmap.rows,
+                    0, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glGenerateMipmap(GL_TEXTURE_2D);
+
+                float scale = (float)fontSize / (float)renderSize;
+                Character character = {
+                    texture,
+                    glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
+                    glm::ivec2(face->glyph->bitmap_left * scale, face->glyph->bitmap_top * scale),
+                    static_cast<uint32_t>(face->glyph->advance.x * scale)
+                };
+                tempCharacters[codepoint] = character;
+                loadedCount++;
+            }
+            glBindTexture(GL_TEXTURE_2D, 0);
+            std::cout << "[FontManager]   " << rangeName << ": " << loadedCount << " chars" << std::endl;
+            return loadedCount > 0;
+            };
+
+        if (!loadRange(0, 127, "ASCII")) {
+            std::cerr << "[FontManager] CRITICAL: Failed to load ASCII" << std::endl;
+            FT_Done_Face(face);
+            return false;
+        }
+
+        loadRange(128, 255, "Extended ASCII");
+        loadRange(0x0100, 0x017F, "Latin Extended-A");
+        loadRange(0x0180, 0x024F, "Latin Extended-B");
+        loadRange(0x0600, 0x06FF, "Arabic");
+        loadRange(0xFB50, 0xFDFF, "Arabic Forms-A");
+        loadRange(0xFE70, 0xFEFF, "Arabic Forms-B");
+        loadRange(0x0590, 0x05FF, "Hebrew");
+        loadRange(0x0400, 0x04FF, "Cyrillic");
+        loadRange(0x0370, 0x03FF, "Greek");
+        loadRange(0x2000, 0x206F, "Punctuation");
+        loadRange(0x20A0, 0x20CF, "Currency");
+        loadRange(0x3040, 0x309F, "Hiragana");
+        loadRange(0x30A0, 0x30FF, "Katakana");
+        loadRange(0x4E00, 0x9FFF, "CJK Unified");
+        loadRange(0xAC00, 0xD7AF, "Hangul Syllables");
+        loadRange(0x1100, 0x11FF, "Hangul Jamo");
+        loadRange(0x1F300, 0x1F5FF, "Emoji Symbols");
+        loadRange(0x1F600, 0x1F64F, "Emoticons");
+        loadRange(0x1F680, 0x1F6FF, "Transport Emoji");
+        loadRange(0x1F900, 0x1F9FF, "Supplemental Emoji");
+        loadRange(0x2600, 0x26FF, "Misc Symbols");
+        loadRange(0x2700, 0x27BF, "Dingbats");
 
         FontData fontData;
         fontData.fontSize = fontSize;
         fontData.face = face;
         fontData.renderOptions = options;
+        fontData.characters = std::move(tempCharacters);
+        fontData.glyphCache = std::move(tempGlyphCache);
+        fontData.kerningCache = std::move(tempKerningCache);
+        m_Fonts[name] = std::move(fontData);
 
-        // Load basic ASCII
-        if (!LoadCharacterRange(face, 0, 127)) {
-            std::cerr << "[FontManager] Failed to load ASCII characters" << std::endl;
-            FT_Done_Face(face);
-            return false;
-        }
-
-        // Load Arabic characters
-        LoadCharacterRange(face, 0x0600, 0x06FF);
-        LoadCharacterRange(face, 0xFB50, 0xFDFF);
-        LoadCharacterRange(face, 0xFE70, 0xFEFF);
-
-        fontData.characters = m_ActiveCharacters;
-
-        // Preload kerning if enabled
-        if (options.useKerning && FT_HAS_KERNING(face)) {
-            std::cout << "[FontManager] Loading kerning pairs for: " << name << std::endl;
-
-            std::vector<std::pair<uint32_t, uint32_t>> commonPairs = {
-                {'A', 'V'}, {'A', 'W'}, {'A', 'Y'}, {'T', 'o'}, {'T', 'a'}, {'V', 'a'},
-                {'W', 'a'}, {'Y', 'o'}, {'Y', 'a'}, {'r', 'a'}, {'f', 'a'}
-            };
-
-            for (const auto& pair : commonPairs) {
-                CacheKerning(face, pair.first, pair.second);
-            }
-
-            fontData.kerningCache = m_ActiveKerningCache;
-        }
-
-        m_Fonts[name] = fontData;
-
-        std::cout << "[FontManager] Loaded font: " << name
-            << " with " << fontData.characters.size() << " glyphs"
-            << (options.useKerning ? " [Kerning ON]" : "") << std::endl;
+        std::cout << "[FontManager] Loaded " << m_Fonts[name].characters.size() << " characters" << std::endl;
 
         if (m_ActiveFontName.empty()) {
             SetActiveFont(name);
         }
-
         return true;
     }
 
     bool FontManager::LoadCharacterRange(FT_Face face, uint32_t start, uint32_t end) {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
+        uint32_t loadedCount = 0;
+        uint32_t attemptedCount = 0;
+
         for (uint32_t codepoint = start; codepoint <= end; codepoint++) {
+            attemptedCount++;
+
+            // Check if glyph exists in font
+            uint32_t glyphIndex = FT_Get_Char_Index(face, codepoint);
+            if (glyphIndex == 0) {
+                continue; // Glyph not in font
+            }
+
             if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER)) {
+                std::cerr << "[FontManager] Failed to load char U+"
+                    << std::hex << codepoint << std::dec << std::endl;
                 continue;
             }
 
             if (face->glyph->bitmap.width == 0 || face->glyph->bitmap.rows == 0) {
+                // Create empty glyph for spaces
+                Character character = {
+                    0,
+                    glm::ivec2(0, 0),
+                    glm::ivec2(0, 0),
+                    static_cast<uint32_t>(face->glyph->advance.x)
+                };
+                m_ActiveCharacters[codepoint] = character;
+                loadedCount++;
                 continue;
             }
 
@@ -177,9 +262,15 @@ namespace Unicorn::UI {
             };
 
             m_ActiveCharacters[codepoint] = character;
+            loadedCount++;
         }
 
         glBindTexture(GL_TEXTURE_2D, 0);
+
+        std::cout << "[FontManager]     Range U+" << std::hex << start
+            << "-U+" << end << std::dec
+            << ": Loaded " << loadedCount << " / " << attemptedCount << " chars" << std::endl;
+
         return true;
     }
 
@@ -213,8 +304,9 @@ namespace Unicorn::UI {
         m_ActiveFace = it->second.face;
         m_RenderOptions = it->second.renderOptions;
 
-        std::cout << "[FontManager] Active font set to: " << name
-            << " [" << m_ActiveKerningCache.size() << " kerning pairs cached]"
+        std::cout << "[FontManager] Active font: " << name
+            << " | " << m_ActiveCharacters.size() << " characters"
+            << " | " << m_ActiveKerningCache.size() << " kerning pairs"
             << std::endl;
 
         return true;
@@ -226,39 +318,15 @@ namespace Unicorn::UI {
             return it->second;
         }
 
-        // Try to load dynamically
-        if (m_ActiveFace) {
+        if (m_ActiveFace && codepoint >= 0x4E00 && codepoint <= 0x9FFF) {
+            std::cout << "[FontManager] Lazy loading CJK character U+"
+                << std::hex << codepoint << std::dec << std::endl;
+
             FontManager* self = const_cast<FontManager*>(this);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-            if (FT_Load_Char(m_ActiveFace, codepoint, FT_LOAD_RENDER) == 0) {
-                if (m_ActiveFace->glyph->bitmap.width > 0 && m_ActiveFace->glyph->bitmap.rows > 0) {
-                    uint32_t texture;
-                    glGenTextures(1, &texture);
-                    glBindTexture(GL_TEXTURE_2D, texture);
-                    glTexImage2D(
-                        GL_TEXTURE_2D, 0, GL_RED,
-                        m_ActiveFace->glyph->bitmap.width,
-                        m_ActiveFace->glyph->bitmap.rows,
-                        0, GL_RED, GL_UNSIGNED_BYTE,
-                        m_ActiveFace->glyph->bitmap.buffer
-                    );
-
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-                    Character character = {
-                        texture,
-                        glm::ivec2(m_ActiveFace->glyph->bitmap.width, m_ActiveFace->glyph->bitmap.rows),
-                        glm::ivec2(m_ActiveFace->glyph->bitmap_left, m_ActiveFace->glyph->bitmap_top),
-                        static_cast<uint32_t>(m_ActiveFace->glyph->advance.x)
-                    };
-
-                    self->m_ActiveCharacters[codepoint] = character;
-                    glBindTexture(GL_TEXTURE_2D, 0);
-                    return self->m_ActiveCharacters[codepoint];
+            if (self->LoadCharacterRange(m_ActiveFace, codepoint, codepoint)) {
+                auto it2 = m_ActiveCharacters.find(codepoint);
+                if (it2 != m_ActiveCharacters.end()) {
+                    return it2->second;
                 }
             }
         }
@@ -267,11 +335,13 @@ namespace Unicorn::UI {
     }
 
     const Character& FontManager::GetCharacterByGlyphIndex(uint32_t glyphIndex) {
+        // Try glyph cache first
         auto it = m_ActiveGlyphCache.find(glyphIndex);
         if (it != m_ActiveGlyphCache.end()) {
             return it->second;
         }
 
+        // Try loading by glyph index (only for HarfBuzz shaped glyphs)
         if (m_ActiveFace) {
             if (LoadGlyphByIndex(m_ActiveFace, glyphIndex)) {
                 auto cachedIt = m_ActiveGlyphCache.find(glyphIndex);
@@ -281,6 +351,7 @@ namespace Unicorn::UI {
             }
         }
 
+        // Fallback to codepoint lookup
         auto cpIt = m_ActiveCharacters.find(glyphIndex);
         if (cpIt != m_ActiveCharacters.end()) {
             return cpIt->second;
@@ -289,9 +360,6 @@ namespace Unicorn::UI {
         return m_DefaultCharacter;
     }
 
-    // ============================================
-    // NEW: Get kerning
-    // ============================================
     float FontManager::GetKerning(uint32_t leftCodepoint, uint32_t rightCodepoint) const {
         if (!m_RenderOptions.useKerning || !m_ActiveFace) {
             return 0.0f;
@@ -303,11 +371,13 @@ namespace Unicorn::UI {
 
         uint64_t key = (static_cast<uint64_t>(leftCodepoint) << 32) | rightCodepoint;
 
+        // Fast cache lookup
         auto it = m_ActiveKerningCache.find(key);
         if (it != m_ActiveKerningCache.end()) {
             return it->second;
         }
 
+        // NOT CACHED - compute and cache it (only happens once per pair)
         FT_UInt leftGlyph = FT_Get_Char_Index(m_ActiveFace, leftCodepoint);
         FT_UInt rightGlyph = FT_Get_Char_Index(m_ActiveFace, rightCodepoint);
 
@@ -325,15 +395,13 @@ namespace Unicorn::UI {
 
         float kerningValue = kerning.x / 64.0f;
 
+        // Cache it for next time
         FontManager* self = const_cast<FontManager*>(this);
         self->m_ActiveKerningCache[key] = kerningValue;
 
         return kerningValue;
     }
 
-    // ============================================
-    // NEW: Cache kerning
-    // ============================================
     void FontManager::CacheKerning(FT_Face face, uint32_t left, uint32_t right) {
         if (!FT_HAS_KERNING(face)) {
             return;
@@ -359,9 +427,6 @@ namespace Unicorn::UI {
         m_ActiveKerningCache[key] = kerningValue;
     }
 
-    // ============================================
-    // NEW: Set render options
-    // ============================================
     void FontManager::SetRenderOptions(const FontRenderOptions& options) {
         m_RenderOptions = options;
 
@@ -371,7 +436,6 @@ namespace Unicorn::UI {
         std::cout << "  - Line height: " << options.lineHeight << "x" << std::endl;
     }
 
-    // UTF-8 conversion
     uint32_t FontManager::UTF8ToCodepoint(const char*& str) {
         uint32_t codepoint = 0;
         unsigned char c = *str++;
@@ -427,7 +491,6 @@ namespace Unicorn::UI {
         return LoadCharacterRange(face, 0, 127);
     }
 
-    // Helper functions for BiDi
     static bool IsRTLCodepoint(uint32_t codepoint) {
         return (codepoint >= 0x0600 && codepoint <= 0x06FF) ||
             (codepoint >= 0xFB50 && codepoint <= 0xFDFF) ||
@@ -563,7 +626,6 @@ namespace Unicorn::UI {
     }
 
     uint32_t FontManager::GenerateCharacterTexture(FT_Face face, uint32_t codepoint) {
-        // This will be used for enhanced AA in future
         return 0;
     }
 
