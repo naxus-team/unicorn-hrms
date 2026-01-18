@@ -7,8 +7,6 @@ namespace Unicorn {
     class Renderer;
     namespace UI { class UIContext; }
 
-    namespace Audio { class SoundManager; }
-
     struct ApplicationConfig {
         std::string name = "Unicorn";
         uint32_t width = 1920;
@@ -26,7 +24,6 @@ namespace Unicorn {
 
         Window& GetWindow() { return *m_Window; }
         UI::UIContext& GetUI() { return *m_UIContext; }
-        Audio::SoundManager& GetAudio() { return *m_AudioManager; }
 
         static Application& Get() { return *s_Instance; }
         static void TriggerRender();
@@ -44,7 +41,6 @@ namespace Unicorn {
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
         std::unique_ptr<UI::UIContext> m_UIContext;
-        std::unique_ptr<Audio::SoundManager> m_AudioManager;
 
 
         bool m_Running = true;

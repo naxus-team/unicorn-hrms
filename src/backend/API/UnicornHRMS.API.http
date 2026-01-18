@@ -1,0 +1,6 @@
+@UnicornHRMS.API_HostAddress = http://localhost:5195
+
+GET {{UnicornHRMS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

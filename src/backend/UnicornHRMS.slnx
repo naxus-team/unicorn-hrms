@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/API/">
+    <Project Path="API/UnicornHRMS.API.csproj" />
+  </Folder>
+  <Folder Name="/Core/">
+    <Project Path="Core/UnicornHRMS.Core.csproj" />
+  </Folder>
+  <Folder Name="/Data/">
+    <Project Path="Data/UnicornHRMS.Data.csproj" />
+  </Folder>
+  <Folder Name="/Services/">
+    <Project Path="Services/UnicornHRMS.Services.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/UnicornHRMS.Tests.csproj" />
+  </Folder>
+</Solution>

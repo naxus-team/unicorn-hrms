@@ -1,4 +1,4 @@
-#include "ui_context.h"
+﻿#include "ui_context.h"
 #include "ui_renderer.h"
 #include "../core/input.h"
 #include "../core/application.h"
@@ -21,13 +21,13 @@ namespace Unicorn::UI {
     void UIContext::Init() {
         std::cout << "[UI] Initializing UI Context..." << std::endl;
 
-        // Get window dimensions from Application
         Application& app = Application::Get();
         Window& window = app.GetWindow();
         uint32_t width = window.GetWidth();
         uint32_t height = window.GetHeight();
 
-        m_Renderer->Init(width, height);
+        // ⭐ Initialize renderer with MSAA4x mode and 14px fonts
+        m_Renderer->Init(width, height, UI::MSAAMode::MSAA4x);
 
         m_IconManager = std::make_unique<IconManager>();
         if (!m_IconManager->Init()) {
@@ -37,7 +37,8 @@ namespace Unicorn::UI {
         m_AnimController = std::make_unique<AnimationController>();
 
         std::cout << "[UI] Initialized with viewport: " << width << "x" << height << std::endl;
-        std::cout << "[UI] Icon Manager loaded with " << m_IconManager->GetIcon("add") << " icons" << std::endl;
+        std::cout << "[UI] MSAA Mode: 4x (Balanced quality)" << std::endl;
+        std::cout << "[UI] Font Size: 14px" << std::endl;
     }
 
     void UIContext::Shutdown() {

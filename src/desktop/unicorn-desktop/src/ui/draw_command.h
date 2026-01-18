@@ -43,8 +43,6 @@ namespace Unicorn::UI {
         glm::vec4 borderColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.08f);
     };
 
-    // Helper function to draw flat borders with rounded corners (Blender-style)
-    // Uses a dual-layer approach: outer colored rect + inner content rect
     inline void DrawBorder(std::vector<DrawCommand>& commands, const glm::vec2& pos,
         const glm::vec2& size, BorderStyle style, float width,
         const glm::vec4& baseColor, float rounding = 0.0f) {

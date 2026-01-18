@@ -20,12 +20,20 @@ namespace Unicorn::UI {
         float rounding;         // Corner rounding radius
     };
 
+    enum class MSAAMode {
+        None = 0,    // No MSAA
+        MSAA2x = 2,  // 2x MSAA
+        MSAA4x = 4,  // 4x MSAA (balanced)
+        MSAA8x = 8,  // 8x MSAA (high quality)
+        MSAA16x = 16 // 16x MSAA (ultra quality, performance impact)
+    };
+
     class UIRenderer {
     public:
         UIRenderer();
         ~UIRenderer();
 
-        void Init(uint32_t windowWidth, uint32_t windowHeight);
+        void Init(uint32_t windowWidth, uint32_t windowHeight, MSAAMode msaaMode = MSAAMode::MSAA4x);
         void Shutdown();
 
         void BeginFrame();
@@ -50,6 +58,9 @@ namespace Unicorn::UI {
 
         FontManager& GetFontManager() { return *m_FontManager; }
         const FontManager& GetFontManager() const { return *m_FontManager; }
+
+        void SetMSAAMode(MSAAMode mode) { m_MSAAMode = mode; }
+        MSAAMode GetMSAAMode() const { return m_MSAAMode; }
 
     private:
         void InitShaders();
@@ -79,6 +90,7 @@ namespace Unicorn::UI {
         uint32_t m_WindowHeight = 0;
 
         std::unique_ptr<FontManager> m_FontManager;
+        MSAAMode m_MSAAMode = MSAAMode::MSAA4x;
 
         // Scissor stack for clipping
         struct ScissorRect {

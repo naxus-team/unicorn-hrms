@@ -1,4 +1,5 @@
 ﻿#include "ui_renderer.h"
+#include "font_manager.h"
 #include "../core/window.h"
 #include <glad/glad.h>
 #include <iostream>
@@ -122,20 +123,39 @@ namespace Unicorn::UI {
         Shutdown();
     }
 
-    void UIRenderer::Init(uint32_t windowWidth, uint32_t windowHeight) {
+    void UIRenderer::Init(uint32_t windowWidth, uint32_t windowHeight, MSAAMode msaaMode) {
         std::cout << "[UIRenderer] ========================================" << std::endl;
         std::cout << "[UIRenderer] Starting initialization..." << std::endl;
         std::cout << "[UIRenderer] Window size: " << windowWidth << "x" << windowHeight << std::endl;
 
         m_WindowWidth = windowWidth;
         m_WindowHeight = windowHeight;
+        m_MSAAMode = msaaMode;
 
         try {
-            std::cout << "[UIRenderer] Step 1: Enabling MSAA..." << std::endl;
-            glEnable(GL_MULTISAMPLE);
-            glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-            glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
-            std::cout << "[UIRenderer]   ✓ MSAA enabled" << std::endl;
+            // ⭐ Configure MSAA
+            std::cout << "[UIRenderer] Step 1: Configuring MSAA..." << std::endl;
+
+            if (m_MSAAMode != MSAAMode::None) {
+                glEnable(GL_MULTISAMPLE);
+
+                // Query actual MSAA samples
+                GLint samples;
+                glGetIntegerv(GL_SAMPLES, &samples);
+
+                std::cout << "[UIRenderer]   Requested MSAA: " << static_cast<int>(m_MSAAMode) << "x" << std::endl;
+                std::cout << "[UIRenderer]   Actual MSAA samples: " << samples << "x" << std::endl;
+
+                // Enhanced rendering hints
+                glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+                glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+
+                std::cout << "[UIRenderer]   ✓ MSAA enabled with enhanced hints" << std::endl;
+            }
+            else {
+                glDisable(GL_MULTISAMPLE);
+                std::cout << "[UIRenderer]   MSAA disabled" << std::endl;
+            }
 
             std::cout << "[UIRenderer] Step 2: Initializing FontManager..." << std::endl;
             if (!m_FontManager) {
@@ -175,7 +195,6 @@ namespace Unicorn::UI {
             for (const auto& [fontName, fontPath] : fontPaths) {
                 std::cout << "[UIRenderer]   Trying: " << fontPath << std::endl;
 
-                // File existence check
                 FILE* testFile = fopen(fontPath.c_str(), "rb");
                 if (!testFile) {
                     std::cout << "[UIRenderer]     ✗ File not accessible" << std::endl;
@@ -184,13 +203,12 @@ namespace Unicorn::UI {
                 fclose(testFile);
                 std::cout << "[UIRenderer]     ✓ File exists" << std::endl;
 
-                // Try loading
-                if (m_FontManager->LoadFontWithOptions(fontName, fontPath, 16, fontOptions)) {
-                    std::cout << "[UIRenderer]     ✓ Font loaded successfully" << std::endl;
+                // ⭐ Load with 14px size
+                if (m_FontManager->LoadFontWithOptions(fontName, fontPath, 14, fontOptions)) {
+                    std::cout << "[UIRenderer]     ✓ Font loaded successfully @ 14px" << std::endl;
                     fontLoaded = true;
 
-                    // Set as active
-                    if (fontName == "msgothic" || fontName == "meiryo" || !fontLoaded) {
+                    if (!fontLoaded || fontName == "arial") {
                         m_FontManager->SetActiveFont(fontName);
                         std::cout << "[UIRenderer]     ✓ Set as active font" << std::endl;
                     }
@@ -202,10 +220,9 @@ namespace Unicorn::UI {
 
             if (!fontLoaded) {
                 std::cerr << "[UIRenderer]   ✗✗✗ CRITICAL: No fonts loaded!" << std::endl;
-                // Don't return - continue with broken fonts for debugging
             }
             else {
-                std::cout << "[UIRenderer]   ✓ At least one font loaded" << std::endl;
+                std::cout << "[UIRenderer]   ✓ At least one font loaded @ 14px" << std::endl;
             }
 
             std::cout << "[UIRenderer] Step 5: Initializing shaders..." << std::endl;
@@ -217,18 +234,11 @@ namespace Unicorn::UI {
 
             std::cout << "[UIRenderer] Step 6: Creating OpenGL buffers..." << std::endl;
 
-            // VAO/VBO/IBO for shapes
             glGenVertexArrays(1, &m_VAO);
-            std::cout << "[UIRenderer]   VAO: " << m_VAO << std::endl;
-
             glGenBuffers(1, &m_VBO);
-            std::cout << "[UIRenderer]   VBO: " << m_VBO << std::endl;
-
             glGenBuffers(1, &m_IBO);
-            std::cout << "[UIRenderer]   IBO: " << m_IBO << std::endl;
 
             glBindVertexArray(m_VAO);
-
             glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
             glBufferData(GL_ARRAY_BUFFER, MaxVertices * sizeof(UIVertex), nullptr, GL_DYNAMIC_DRAW);
 
@@ -266,10 +276,7 @@ namespace Unicorn::UI {
             std::cout << "[UIRenderer] Step 7: Creating text rendering buffers..." << std::endl;
 
             glGenVertexArrays(1, &m_TextVAO);
-            std::cout << "[UIRenderer]   Text VAO: " << m_TextVAO << std::endl;
-
             glGenBuffers(1, &m_TextVBO);
-            std::cout << "[UIRenderer]   Text VBO: " << m_TextVBO << std::endl;
 
             glBindVertexArray(m_TextVAO);
             glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
@@ -286,7 +293,6 @@ namespace Unicorn::UI {
             SetViewport(windowWidth, windowHeight);
             std::cout << "[UIRenderer]   ✓ Viewport set" << std::endl;
 
-            // Check for OpenGL errors
             GLenum err;
             while ((err = glGetError()) != GL_NO_ERROR) {
                 std::cerr << "[UIRenderer]   ✗ OpenGL error during init: " << err << std::endl;
@@ -294,14 +300,12 @@ namespace Unicorn::UI {
 
             std::cout << "[UIRenderer] ========================================" << std::endl;
             std::cout << "[UIRenderer] ✓✓✓ INITIALIZATION COMPLETE ✓✓✓" << std::endl;
+            std::cout << "[UIRenderer] MSAA Mode: " << static_cast<int>(m_MSAAMode) << "x" << std::endl;
+            std::cout << "[UIRenderer] Font Size: 14px" << std::endl;
             std::cout << "[UIRenderer] ========================================" << std::endl;
         }
         catch (const std::exception& e) {
             std::cerr << "[UIRenderer] ✗✗✗ EXCEPTION during init: " << e.what() << std::endl;
-            throw;
-        }
-        catch (...) {
-            std::cerr << "[UIRenderer] ✗✗✗ UNKNOWN EXCEPTION during init!" << std::endl;
             throw;
         }
     }
@@ -542,79 +546,74 @@ namespace Unicorn::UI {
         glActiveTexture(GL_TEXTURE0);
         glBindVertexArray(m_TextVAO);
 
-        // Get shaped glyphs from HarfBuzz
         auto shapedGlyphs = m_FontManager->ShapeText(text);
-
         if (shapedGlyphs.empty()) {
             glBindVertexArray(0);
             glDisable(GL_BLEND);
             return;
         }
 
-        // Get font rendering options
+        // Get font atlas texture
+        uint32_t atlasTexture = m_FontManager->GetFontAtlasTexture();
+        glBindTexture(GL_TEXTURE_2D, atlasTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
         const auto& renderOptions = m_FontManager->GetRenderOptions();
         float weight = renderOptions.weight;
         float baselineOffset = renderOptions.baselineOffset;
 
         FT_Face face = m_FontManager->GetActiveFace();
         float fontSize = face ? (float)face->size->metrics.height / 64.0f : 16.0f;
-
         float lineHeight = renderOptions.lineHeight > 0.0f ? renderOptions.lineHeight : 1.0f;
         float baselineY = pos.y + (fontSize * 0.75f * lineHeight);
 
-        // Render each glyph
+        // Render each glyph from atlas
         for (const auto& glyph : shapedGlyphs) {
             const Character& ch = m_FontManager->GetCharacterByGlyphIndex(glyph.glyphIndex);
 
-            if (ch.textureID == 0) {
-                continue; // Skip missing glyphs
+            if (ch.textureID == 0 || (ch.size.x == 0 && ch.size.y == 0)) {
+                continue;
             }
 
-            // Calculate position with HarfBuzz offsets
             float xpos = pos.x + glyph.offset.x + ch.bearing.x;
             float ypos = baselineY + glyph.offset.y - ch.bearing.y;
-
             float w = ch.size.x;
             float h = ch.size.y;
 
-            // Apply weight (bold effect through slight enlargement + multi-pass rendering)
+            // Apply weight
             if (weight > 0.01f) {
-                // Calculate weight expansion
-                float weightExpansion = weight * 0.5f; // pixels
-
-                // Expand glyph slightly
+                float weightExpansion = weight * 0.5f;
                 xpos -= weightExpansion * 0.5f;
                 ypos -= weightExpansion * 0.5f;
                 w += weightExpansion;
                 h += weightExpansion;
             }
 
+            // Use atlas UV coordinates instead of 0-1
+            float u0 = ch.atlasPos.x;
+            float v0 = ch.atlasPos.y;
+            float u1 = ch.atlasPos.x + ch.atlasSize.x;
+            float v1 = ch.atlasPos.y + ch.atlasSize.y;
+
             float vertices[6][4] = {
-                { xpos,     ypos + h,   0.0f, 1.0f },
-                { xpos,     ypos,       0.0f, 0.0f },
-                { xpos + w, ypos,       1.0f, 0.0f },
+                { xpos,     ypos + h,   u0, v1 },
+                { xpos,     ypos,       u0, v0 },
+                { xpos + w, ypos,       u1, v0 },
 
-                { xpos,     ypos + h,   0.0f, 1.0f },
-                { xpos + w, ypos,       1.0f, 0.0f },
-                { xpos + w, ypos + h,   1.0f, 1.0f }
+                { xpos,     ypos + h,   u0, v1 },
+                { xpos + w, ypos,       u1, v0 },
+                { xpos + w, ypos + h,   u1, v1 }
             };
-
-            glBindTexture(GL_TEXTURE_2D, ch.textureID);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
             glBindBuffer(GL_ARRAY_BUFFER, m_TextVBO);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-            // First pass: main glyph
             glDrawArrays(GL_TRIANGLES, 0, 6);
 
-            // Additional passes for weight (bold effect)
+            // Additional passes for weight
             if (weight > 0.5f) {
-                // Second pass with slight offset for extra boldness
                 float offsetX = 0.3f;
                 for (int i = 0; i < 6; i++) {
                     vertices[i][0] += offsetX;
@@ -626,7 +625,6 @@ namespace Unicorn::UI {
             }
 
             if (weight > 1.0f) {
-                // Third pass for extra bold
                 for (int i = 0; i < 6; i++) {
                     vertices[i][0] += 0.3f;
                 }

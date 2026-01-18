@@ -4,7 +4,6 @@
 #include "ui/ui_context.h"
 #include "ui/ui_renderer.h"
 #include "ui/font_manager.h"
-#include "audio/sound_manager.h"
 #ifdef HAVE_CURL
 #include "background/background_manager.h"
 #endif
@@ -116,11 +115,6 @@ namespace Unicorn {
             std::cout << "Unicorn HRMS Starting..." << std::endl;
             std::cout << "==================================" << std::endl;
 
-            auto& audio = GetAudio();
-            audio.LoadSound("click", "./assets/sounds/click.wav");
-            audio.LoadSound("hover", "./assets/sounds/hover.wav");
-            audio.SetMasterVolume(0.7f);
-
 
             auto& renderer = GetUI().GetRenderer();
             auto& fontManager = renderer.GetFontManager();
@@ -129,7 +123,7 @@ namespace Unicorn {
             fontOptions.useKerning = true;              // Enable kerning for better spacing
             fontOptions.useHinting = true;              // Enable hinting for sharpness
             fontOptions.useAntialiasing = true;         // Critical for quality
-            fontOptions.aaMode = UI::FontRenderOptions::AntialiasMode::LCD;  // ⭐ Best quality
+            fontOptions.aaMode = UI::FontRenderOptions::AntialiasMode::LCD;
             fontOptions.letterSpacing = 0.0f;           // Default spacing
             fontOptions.lineHeight = 1.2f;              // Better line spacing
             fontOptions.weight = 0.0f;                  // Normal weight (0-2)
@@ -167,7 +161,7 @@ namespace Unicorn {
                 fclose(testFile);
                 std::cout << "[HRMS]     ✓ File exists" << std::endl;
 
-                if (fontManager.LoadFontWithOptions(fontName, fontPath, fontSize, fontOptions)) {
+                if (fontManager.LoadFontWithOptions(fontName, fontPath, 14, fontOptions)) {
                     std::cout << "[HRMS]     ✓ Font loaded successfully" << std::endl;
 
                     if (!fontLoaded) {
@@ -218,12 +212,6 @@ namespace Unicorn {
 #ifdef HAVE_CURL
             auto& bgManager = Background::BackgroundManager::Get();
             bgManager.Update();
-#endif
-
-#ifdef HAVE_FFMPEG
-            if (m_VideoPlayer) {
-                m_VideoPlayer->Update(dt);
-            }
 #endif
         }
 
@@ -337,9 +325,6 @@ namespace Unicorn {
             case 1: RenderEmployees(ui, contentX, contentWidth); break;
             case 2: RenderReports(ui, contentX, contentWidth); break;
             case 3: RenderCodeTools(ui, contentX, contentWidth); break;
-#ifdef HAVE_FFMPEG
-            case 4: RenderVideoPlayer(ui, contentX, contentWidth); break;
-#endif
 #ifdef HAVE_CURL
             case 5: RenderAPIManager(ui, contentX, contentWidth); break;
             case 6: RenderAPITesting(ui, contentX, contentWidth); break;
@@ -514,44 +499,6 @@ namespace Unicorn {
                     ui.Text(text);
                     });
                 ui.Spacing(5.0f);
-            }
-
-            ui.EndWindow();
-        }
-
-        void RenderVideoPlayer(UI::UIContext& ui, float contentX, float contentWidth) {
-            float windowWidth = glm::min(contentWidth * 0.95f, 1000.0f);
-
-            ui.BeginWindow("Video Player",
-                glm::vec2(contentX, 30),
-                glm::vec2(windowWidth, 700)
-            );
-
-            ui.TextColored(UI::Color::Primary, "Video Player");
-            ui.Spacing();
-            ui.Separator(1.0f, windowWidth - 40.0f);
-            ui.Spacing();
-
-            static std::string videoPath = "./test.mp4";
-            static bool isURL = false;
-
-            ui.Text("Video Source:");
-            ui.Spacing();
-
-            if (ui.InputText("##videopath", videoPath, 512)) {
-                GetUI().MarkDirty();
-            }
-
-            ui.Checkbox("Load from URL", &isURL);
-            ui.Spacing();
-
-            float buttonWidth = glm::min(windowWidth - 40.0f, 200.0f);
-            if (ui.ButtonWithIcon("settings", "Load Video", glm::vec2(buttonWidth, 42))) {
-#ifdef HAVE_FFMPEG
-                if (m_VideoPlayer) {
-                    m_VideoPlayer->LoadVideo(videoPath, isURL);
-                }
-#endif
             }
 
             ui.EndWindow();
@@ -992,9 +939,6 @@ namespace Unicorn {
 #endif
 
     private:
-#ifdef HAVE_FFMPEG
-        std::unique_ptr<Video::VideoPlayer> m_VideoPlayer;
-#endif
 #ifdef HAVE_CURL
         Background::RequestState m_ApiRequestState;
         Background::RequestMethod m_ApiMethod;

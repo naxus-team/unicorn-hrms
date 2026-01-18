@@ -3,7 +3,6 @@
 #include "input.h"
 #include "../renderer/renderer.h"
 #include "../ui/ui_context.h"
-#include "../audio/sound_manager.h"
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <chrono>
@@ -26,7 +25,6 @@ namespace Unicorn {
         m_Window = std::unique_ptr<Window>(Window::Create(props));
         m_Renderer = std::make_unique<Renderer>();
         m_UIContext = std::make_unique<UI::UIContext>();
-        m_AudioManager = std::make_unique<Audio::SoundManager>();
     }
 
     Application::~Application() {}
@@ -37,7 +35,6 @@ namespace Unicorn {
         OnInit();
         m_Renderer->Init();
         m_UIContext->Init();
-        m_AudioManager->Init();
 
         double lastFrameTime = glfwGetTime();
         m_UIContext->MarkDirty();

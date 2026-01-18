@@ -1,0 +1,59 @@
+curl and libcurl 8.18.1
+
+ Public curl releases:         273
+ Command line options:         273
+ curl_easy_setopt() options:   308
+ Public functions in libcurl:  100
+ Contributors:                 3571
+
+This release includes the following changes:
+
+
+This release includes the following bugfixes:
+
+ o build: detect and include `inttypes.h` again [13]
+ o config-plan9: set `HAVE_STDINT_H` again [17]
+ o docs: explicitly call out Slowloris as not a security flaw [6]
+ o http/3: add description for known server error codes [15]
+ o mprintf: drop old sprintf fallback [7]
+ o ngtcp2: stabilize recv [18]
+ o tool_dirhie: drop superfluous `F_OK` fallback (Windows) [8]
+ o tool_operate: remove 'else' for VMS [3]
+ o urldata.h: remove two forward-declared structs not used [4]
+ o urldata: switch to uint* types [1]
+
+This release includes the following known bugs:
+
+ See https://curl.se/docs/knownbugs.html
+
+For all changes ever done in curl:
+
+ See https://curl.se/changes.html
+
+Planned upcoming removals include:
+
+ o OpenSSL-QUIC
+ o RTMP support
+ o Support for c-ares versions before 1.16.0
+ o Support for Windows XP/2003
+
+ See https://curl.se/dev/deprecate.html
+
+This release would not have looked like this without help, code, reports and
+advice from friends like these:
+
+  Daniel Stenberg, James Fuller, Stefan Eissing, Viktor Szakats
+  (4 contributors)
+
+References to bug reports and discussions on issues:
+
+ [1] = https://curl.se/bug/?i=20209
+ [3] = https://curl.se/bug/?i=20221
+ [4] = https://curl.se/bug/?i=20206
+ [6] = https://curl.se/bug/?i=20219
+ [7] = https://curl.se/bug/?i=20218
+ [8] = https://curl.se/bug/?i=20214
+ [13] = https://curl.se/bug/?i=20208
+ [15] = https://curl.se/bug/?i=20202
+ [17] = https://curl.se/bug/?i=20201
+ [18] = https://curl.se/bug/?i=20220
