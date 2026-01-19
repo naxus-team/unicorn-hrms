@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using UnicornHRMS.Core.Entities;
 using UnicornHRMS.Core.Interfaces;
 using UnicornHRMS.Services.DTOs.Common;
@@ -11,11 +11,13 @@ namespace UnicornHRMS.Services.Implementation
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
+        private readonly ILocationService _locationService;
 
-        public AttendanceService(IUnitOfWork unitOfWork, IMapper mapper)
+        public AttendanceService(IUnitOfWork unitOfWork, IMapper mapper, ILocationService locationService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
+            _locationService = locationService;
         }
 
         public async Task<ResponseDto<AttendanceDto>> GetByIdAsync(int id)
@@ -88,14 +90,12 @@ namespace UnicornHRMS.Services.Implementation
         {
             try
             {
-                // Check if employee exists
                 var employee = await _unitOfWork.Employees.GetByIdAsync(dto.EmployeeId);
                 if (employee == null)
                 {
                     return ResponseDto<AttendanceDto>.FailureResponse("Employee not found");
                 }
 
-                // Check if attendance already exists for this date
                 var existing = await _unitOfWork.Attendances.GetByEmployeeAndDateAsync(dto.EmployeeId, dto.Date);
                 if (existing != null)
                 {
@@ -103,10 +103,20 @@ namespace UnicornHRMS.Services.Implementation
                 }
 
                 var attendance = _mapper.Map<Core.Entities.Attendance>(dto);
+
+                // Validate GPS if provided
+                if (dto.CheckInLatitude.HasValue && dto.CheckInLongitude.HasValue)
+                {
+                    if (!_locationService.AreCoordinatesValid(dto.CheckInLatitude.Value, dto.CheckInLongitude.Value))
+                    {
+                        return ResponseDto<AttendanceDto>.FailureResponse("Invalid GPS coordinates for check-in");
+                    }
+                    attendance.IsCheckInLocationValid = _locationService.IsAccuracyAcceptable(dto.CheckInAccuracy);
+                }
+
                 await _unitOfWork.Attendances.AddAsync(attendance);
                 await _unitOfWork.SaveChangesAsync();
 
-                // Reload to get employee data
                 attendance = await _unitOfWork.Attendances.GetByIdAsync(attendance.Id);
                 var attendanceDto = _mapper.Map<AttendanceDto>(attendance);
                 return ResponseDto<AttendanceDto>.SuccessResponse(attendanceDto, "Attendance created successfully");
@@ -128,6 +138,16 @@ namespace UnicornHRMS.Services.Implementation
                 }
 
                 _mapper.Map(dto, attendance);
+
+                // Validate GPS if provided
+                if (dto.CheckInLatitude.HasValue && dto.CheckInLongitude.HasValue)
+                {
+                    if (!_locationService.AreCoordinatesValid(dto.CheckInLatitude.Value, dto.CheckInLongitude.Value))
+                    {
+                        return ResponseDto<AttendanceDto>.FailureResponse("Invalid GPS coordinates for check-in");
+                    }
+                }
+
                 await _unitOfWork.Attendances.UpdateAsync(attendance);
                 await _unitOfWork.SaveChangesAsync();
 
@@ -144,32 +164,47 @@ namespace UnicornHRMS.Services.Implementation
         {
             try
             {
-                // Check if employee exists
                 var employee = await _unitOfWork.Employees.GetByIdAsync(dto.EmployeeId);
                 if (employee == null)
                 {
                     return ResponseDto<AttendanceDto>.FailureResponse("Employee not found");
                 }
 
-                // Check if already checked in
                 var existing = await _unitOfWork.Attendances.GetByEmployeeAndDateAsync(dto.EmployeeId, dto.Date);
                 if (existing != null)
                 {
                     return ResponseDto<AttendanceDto>.FailureResponse("Already checked in for today");
                 }
 
+                // Validate GPS coordinates
+                if (!_locationService.AreCoordinatesValid(dto.Latitude, dto.Longitude))
+                {
+                    return ResponseDto<AttendanceDto>.FailureResponse("Invalid GPS coordinates provided");
+                }
+
+                // Check GPS accuracy
+                var isAccuracyValid = _locationService.IsAccuracyAcceptable(dto.Accuracy);
+                var locationNotes = !isAccuracyValid
+                    ? $"GPS accuracy ({dto.Accuracy:F2}m) exceeds acceptable threshold ({_locationService.GetMaxAcceptableAccuracy()}m)"
+                    : null;
+
                 var attendance = new Core.Entities.Attendance
                 {
                     EmployeeId = dto.EmployeeId,
                     Date = dto.Date.Date,
                     CheckIn = dto.CheckIn,
+                    CheckInLatitude = dto.Latitude,
+                    CheckInLongitude = dto.Longitude,
+                    CheckInAccuracy = dto.Accuracy,
+                    IsCheckInLocationValid = isAccuracyValid,
+                    LocationNotes = locationNotes,
+                    Notes = dto.Notes,
                     Status = AttendanceStatus.Present
                 };
 
                 await _unitOfWork.Attendances.AddAsync(attendance);
                 await _unitOfWork.SaveChangesAsync();
 
-                // Reload to get employee data
                 attendance = await _unitOfWork.Attendances.GetByIdAsync(attendance.Id);
                 var attendanceDto = _mapper.Map<AttendanceDto>(attendance);
                 return ResponseDto<AttendanceDto>.SuccessResponse(attendanceDto, "Checked in successfully");
@@ -189,13 +224,47 @@ namespace UnicornHRMS.Services.Implementation
                 {
                     return ResponseDto<AttendanceDto>.FailureResponse("No check-in record found for today");
                 }
+
                 if (attendance.CheckOut.HasValue)
                 {
                     return ResponseDto<AttendanceDto>.FailureResponse("Already checked out");
                 }
+
+                // Validate GPS coordinates
+                if (!_locationService.AreCoordinatesValid(dto.Latitude, dto.Longitude))
+                {
+                    return ResponseDto<AttendanceDto>.FailureResponse("Invalid GPS coordinates provided");
+                }
+
+                // Check GPS accuracy
+                var isAccuracyValid = _locationService.IsAccuracyAcceptable(dto.Accuracy);
+                var locationNotes = attendance.LocationNotes ?? "";
+
+                if (!isAccuracyValid)
+                {
+                    if (!string.IsNullOrEmpty(locationNotes))
+                        locationNotes += " | ";
+                    locationNotes += $"Check-out GPS accuracy ({dto.Accuracy:F2}m) exceeds acceptable threshold ({_locationService.GetMaxAcceptableAccuracy()}m)";
+                }
+
                 attendance.CheckOut = dto.CheckOut;
+                attendance.CheckOutLatitude = dto.Latitude;
+                attendance.CheckOutLongitude = dto.Longitude;
+                attendance.CheckOutAccuracy = dto.Accuracy;
+                attendance.IsCheckOutLocationValid = isAccuracyValid;
+                attendance.LocationNotes = string.IsNullOrEmpty(locationNotes) ? null : locationNotes;
+
+                if (!string.IsNullOrEmpty(dto.Notes))
+                {
+                    attendance.Notes = string.IsNullOrEmpty(attendance.Notes)
+                        ? dto.Notes
+                        : $"{attendance.Notes} | {dto.Notes}";
+                }
+
                 await _unitOfWork.Attendances.UpdateAsync(attendance);
-                await _unitOfWork.SaveChangesAsync(); var attendanceDto = _mapper.Map<AttendanceDto>(attendance);
+                await _unitOfWork.SaveChangesAsync();
+
+                var attendanceDto = _mapper.Map<AttendanceDto>(attendance);
                 return ResponseDto<AttendanceDto>.SuccessResponse(attendanceDto, "Checked out successfully");
             }
             catch (Exception ex)
@@ -203,6 +272,7 @@ namespace UnicornHRMS.Services.Implementation
                 return ResponseDto<AttendanceDto>.FailureResponse($"Error checking out: {ex.Message}");
             }
         }
+
         public async Task<ResponseDto<bool>> DeleteAsync(int id)
         {
             try
@@ -212,9 +282,12 @@ namespace UnicornHRMS.Services.Implementation
                 {
                     return ResponseDto<bool>.FailureResponse("Attendance record not found");
                 }
+
                 attendance.IsDeleted = true;
                 await _unitOfWork.Attendances.UpdateAsync(attendance);
-                await _unitOfWork.SaveChangesAsync(); return ResponseDto<bool>.SuccessResponse(true, "Attendance deleted successfully");
+                await _unitOfWork.SaveChangesAsync();
+
+                return ResponseDto<bool>.SuccessResponse(true, "Attendance deleted successfully");
             }
             catch (Exception ex)
             {

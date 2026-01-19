@@ -21,18 +21,32 @@ namespace UnicornHRMS.Services.Mappings
                 .ForMember(dest => dest.EmployeeCode, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
 
-            // Attendance mappings
+            // Attendance mappings with GPS
             CreateMap<Core.Entities.Attendance, AttendanceDto>()
                 .ForMember(dest => dest.EmployeeName, opt => opt.MapFrom(src =>
                     src.Employee != null ? $"{src.Employee.FirstName} {src.Employee.LastName}" : string.Empty))
-                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()));
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))
+                .ForMember(dest => dest.CheckInLatitude, opt => opt.MapFrom(src => src.CheckInLatitude))
+                .ForMember(dest => dest.CheckInLongitude, opt => opt.MapFrom(src => src.CheckInLongitude))
+                .ForMember(dest => dest.CheckInAccuracy, opt => opt.MapFrom(src => src.CheckInAccuracy))
+                .ForMember(dest => dest.CheckOutLatitude, opt => opt.MapFrom(src => src.CheckOutLatitude))
+                .ForMember(dest => dest.CheckOutLongitude, opt => opt.MapFrom(src => src.CheckOutLongitude))
+                .ForMember(dest => dest.CheckOutAccuracy, opt => opt.MapFrom(src => src.CheckOutAccuracy))
+                .ForMember(dest => dest.IsCheckInLocationValid, opt => opt.MapFrom(src => src.IsCheckInLocationValid))
+                .ForMember(dest => dest.IsCheckOutLocationValid, opt => opt.MapFrom(src => src.IsCheckOutLocationValid))
+                .ForMember(dest => dest.LocationNotes, opt => opt.MapFrom(src => src.LocationNotes));
 
             CreateMap<CreateAttendanceDto, Core.Entities.Attendance>();
+
             CreateMap<UpdateAttendanceDto, Core.Entities.Attendance>()
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.EmployeeId, opt => opt.Ignore())
                 .ForMember(dest => dest.Date, opt => opt.Ignore())
-                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
+                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.CheckInLatitude, opt => opt.Condition(src => src.CheckInLatitude.HasValue))
+                .ForMember(dest => dest.CheckInLongitude, opt => opt.Condition(src => src.CheckInLongitude.HasValue))
+                .ForMember(dest => dest.CheckOutLatitude, opt => opt.Condition(src => src.CheckOutLatitude.HasValue))
+                .ForMember(dest => dest.CheckOutLongitude, opt => opt.Condition(src => src.CheckOutLongitude.HasValue));
 
             // LeaveRequest mappings
             CreateMap<Core.Entities.LeaveRequest, LeaveRequestDto>()
@@ -54,10 +68,12 @@ namespace UnicornHRMS.Services.Mappings
             CreateMap<Department, DepartmentDto>()
                 .ForMember(dest => dest.ManagerName, opt => opt.MapFrom(src =>
                     src.Manager != null ? $"{src.Manager.FirstName} {src.Manager.LastName}" : null))
-                .ForMember(dest => dest.ParentDepartmentName, opt => opt.MapFrom(src => src.ParentDepartment != null ? src.ParentDepartment.Name : null))
+                .ForMember(dest => dest.ParentDepartmentName, opt => opt.MapFrom(src =>
+                    src.ParentDepartment != null ? src.ParentDepartment.Name : null))
                 .ForMember(dest => dest.EmployeeCount, opt => opt.MapFrom(src => src.Employees.Count));
 
             CreateMap<CreateDepartmentDto, Department>();
+
             CreateMap<UpdateDepartmentDto, Department>()
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.Code, opt => opt.Ignore())
@@ -65,8 +81,10 @@ namespace UnicornHRMS.Services.Mappings
 
             // User mappings
             CreateMap<User, UserDto>()
-                .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.UserRoles.Select(ur => ur.Role.Name)))
-                .ForMember(dest => dest.EmployeeId, opt => opt.MapFrom(src => src.Employee != null ? src.Employee.Id : (int?)null));
+                .ForMember(dest => dest.Roles, opt => opt.MapFrom(src =>
+                    src.UserRoles.Select(ur => ur.Role.Name)))
+                .ForMember(dest => dest.EmployeeId, opt => opt.MapFrom(src =>
+                    src.Employee != null ? src.Employee.Id : (int?)null));
         }
     }
 }
