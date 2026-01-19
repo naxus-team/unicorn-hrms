@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UnicornHRMS.Services.DTOs.LeaveRequest;
 using UnicornHRMS.Services.Interfaces;
 
 namespace UnicornHRMS.API.Controllers
 {
+    [Authorize]
     public class LeaveRequestsController : BaseApiController
     {
         private readonly ILeaveRequestService _leaveRequestService;
@@ -36,6 +38,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Get all pending leave requests
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR,Manager")]
         [HttpGet("pending")]
         public async Task<IActionResult> GetPending()
         {
@@ -70,6 +73,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Approve leave request
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR,Manager")]
         [HttpPost("approve")]
         public async Task<IActionResult> Approve([FromBody] ApproveLeaveRequestDto dto)
         {
@@ -80,6 +84,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Reject leave request
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR,Manager")]
         [HttpPost("reject")]
         public async Task<IActionResult> Reject([FromBody] RejectLeaveRequestDto dto)
         {
@@ -100,6 +105,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Delete leave request
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {

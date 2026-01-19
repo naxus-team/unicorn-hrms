@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UnicornHRMS.Services.DTOs.Employee;
 using UnicornHRMS.Services.Interfaces;
 
 namespace UnicornHRMS.API.Controllers
 {
+    [Authorize]
     public class EmployeesController : BaseApiController
     {
         private readonly IEmployeeService _employeeService;
@@ -16,6 +18,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Get all employees
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR,Manager")]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -76,6 +79,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Create a new employee
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateEmployeeDto dto)
         {
@@ -90,6 +94,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Update an existing employee
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateEmployeeDto dto)
         {
@@ -100,6 +105,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Deactivate an employee
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpPatch("{id}/deactivate")]
         public async Task<IActionResult> Deactivate(int id)
         {
@@ -110,6 +116,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Activate an employee
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpPatch("{id}/activate")]
         public async Task<IActionResult> Activate(int id)
         {
@@ -120,6 +127,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Delete an employee (soft delete)
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {

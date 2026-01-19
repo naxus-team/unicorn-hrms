@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UnicornHRMS.Services.DTOs.Attendance;
 using UnicornHRMS.Services.Interfaces;
 
 namespace UnicornHRMS.API.Controllers
 {
+    [Authorize]
     public class AttendancesController : BaseApiController
     {
         private readonly IAttendanceService _attendanceService;
@@ -46,6 +48,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Get all attendance records within a date range
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR,Manager")]
         [HttpGet("date-range")]
         public async Task<IActionResult> GetByDateRange([FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
         {
@@ -56,6 +59,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Create attendance record
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateAttendanceDto dto)
         {
@@ -90,6 +94,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Update attendance record
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateAttendanceDto dto)
         {
@@ -100,6 +105,7 @@ namespace UnicornHRMS.API.Controllers
         /// <summary>
         /// Delete attendance record
         /// </summary>
+        [Authorize(Roles = "Admin,SuperAdmin,HR")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {

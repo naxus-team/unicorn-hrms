@@ -7,11 +7,15 @@ namespace UnicornHRMS.Data
     public class UnitOfWork : IUnitOfWork
     {
         private readonly ApplicationDbContext _context;
+        public ApplicationDbContext Context => _context;
         private IDbContextTransaction? _transaction;
 
         public IEmployeeRepository Employees { get; }
         public IAttendanceRepository Attendances { get; }
         public ILeaveRequestRepository LeaveRequests { get; }
+        public IUserRepository Users { get; }
+        public IRoleRepository Roles { get; }
+        public IDepartmentRepository Departments { get; }
 
         public UnitOfWork(ApplicationDbContext context)
         {
@@ -19,6 +23,9 @@ namespace UnicornHRMS.Data
             Employees = new EmployeeRepository(_context);
             Attendances = new AttendanceRepository(_context);
             LeaveRequests = new LeaveRequestRepository(_context);
+            Users = new UserRepository(_context);
+            Roles = new RoleRepository(_context);
+            Departments = new DepartmentRepository(_context);
         }
 
         public async Task<int> SaveChangesAsync()

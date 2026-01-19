@@ -5,6 +5,9 @@ namespace UnicornHRMS.Core.Interfaces
         IEmployeeRepository Employees { get; }
         IAttendanceRepository Attendances { get; }
         ILeaveRequestRepository LeaveRequests { get; }
+        IUserRepository Users { get; }
+        IRoleRepository Roles { get; }
+        IDepartmentRepository Departments { get; }
 
         Task<int> SaveChangesAsync();
         Task BeginTransactionAsync();

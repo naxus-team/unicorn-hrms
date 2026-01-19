@@ -41,12 +41,23 @@ namespace UnicornHRMS.Data.Configurations
                 .IsRequired()
                 .HasMaxLength(100);
 
-            builder.Property(e => e.Department)
-                .IsRequired()
-                .HasMaxLength(100);
-
             builder.Property(e => e.Salary)
                 .HasColumnType("decimal(18,2)");
+
+            builder.Property(e => e.Address)
+                .HasMaxLength(500);
+
+            builder.Property(e => e.City)
+                .HasMaxLength(100);
+
+            builder.Property(e => e.Country)
+                .HasMaxLength(100);
+
+            builder.Property(e => e.PostalCode)
+                .HasMaxLength(20);
+
+            builder.Property(e => e.ProfilePicture)
+                .HasMaxLength(500);
 
             builder.Property(e => e.CreatedAt)
                 .IsRequired();
@@ -57,7 +68,11 @@ namespace UnicornHRMS.Data.Configurations
             builder.Property(e => e.IsActive)
                 .HasDefaultValue(true);
 
-            // Configure relationships
+            builder.HasOne(e => e.Manager)
+                .WithMany(e => e.Subordinates)
+                .HasForeignKey(e => e.ManagerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             builder.HasMany(e => e.Attendances)
                 .WithOne(a => a.Employee)
                 .HasForeignKey(a => a.EmployeeId)
@@ -68,7 +83,6 @@ namespace UnicornHRMS.Data.Configurations
                 .HasForeignKey(l => l.EmployeeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Query filter for soft delete
             builder.HasQueryFilter(e => !e.IsDeleted);
         }
     }

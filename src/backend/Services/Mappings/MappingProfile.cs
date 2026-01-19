@@ -3,6 +3,8 @@ using UnicornHRMS.Core.Entities;
 using UnicornHRMS.Services.DTOs.Employee;
 using UnicornHRMS.Services.DTOs.Attendance;
 using UnicornHRMS.Services.DTOs.LeaveRequest;
+using UnicornHRMS.Services.DTOs.Department;
+using UnicornHRMS.Services.DTOs.User;
 
 namespace UnicornHRMS.Services.Mappings
 {
@@ -47,6 +49,24 @@ namespace UnicornHRMS.Services.Mappings
                 .ForMember(dest => dest.EmployeeId, opt => opt.Ignore())
                 .ForMember(dest => dest.Status, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
+
+            // Department mappings
+            CreateMap<Department, DepartmentDto>()
+                .ForMember(dest => dest.ManagerName, opt => opt.MapFrom(src =>
+                    src.Manager != null ? $"{src.Manager.FirstName} {src.Manager.LastName}" : null))
+                .ForMember(dest => dest.ParentDepartmentName, opt => opt.MapFrom(src => src.ParentDepartment != null ? src.ParentDepartment.Name : null))
+                .ForMember(dest => dest.EmployeeCount, opt => opt.MapFrom(src => src.Employees.Count));
+
+            CreateMap<CreateDepartmentDto, Department>();
+            CreateMap<UpdateDepartmentDto, Department>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.Code, opt => opt.Ignore())
+                .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
+
+            // User mappings
+            CreateMap<User, UserDto>()
+                .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.UserRoles.Select(ur => ur.Role.Name)))
+                .ForMember(dest => dest.EmployeeId, opt => opt.MapFrom(src => src.Employee != null ? src.Employee.Id : (int?)null));
         }
     }
 }
